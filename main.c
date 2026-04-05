@@ -1,3 +1,4 @@
+#include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
 
@@ -7,7 +8,16 @@
 #include <sys/types.h>
 #include <sys/wait.h>
 
-typedef int (*bool_func_t)(int a, int b);
+typedef int (*bool_func_t)(int* inputs, size_t len);
+
+int* bits_from_int(int num, int n_bits) {
+    int* bits = malloc(sizeof(*bits) * n_bits);
+    for(int i = 0; i < n_bits; i++) {
+        bits[i] = (num >> (n_bits - 1 - i)) & 1;
+    }
+
+    return bits;
+}
 
 int main(void) {
     // TODO: Take input names directly instead of count
@@ -19,11 +29,11 @@ int main(void) {
         return 1;
     }
 
-    char* inputs = malloc(input_count);
+    char* input_names = malloc(input_count);
 
     for(int i = 0; i < input_count; i++) {
         printf("input #%d name: ", i);
-        scanf(" %c", &inputs[i]);
+        scanf(" %c", &input_names[i]);
     }
 
     int function_count = 0;
@@ -37,6 +47,8 @@ int main(void) {
     char** func_names = malloc(function_count * sizeof(*func_names));
 
     FILE* funcs_file = fopen("funcs.c", "w");
+    fprintf(funcs_file, "#include <stddef.h>\n");
+    fprintf(funcs_file, "\n");
 
     for(int i = 0; i < function_count; i++) {
         printf("func #%d expression", i);
@@ -47,12 +59,11 @@ int main(void) {
 
         func_names[i] = func;
 
-        fprintf(funcs_file, "int %s(", func);
+        fprintf(funcs_file, "int %s(int* inputs, size_t len) {\n", func);
         for(int j = 0; j < input_count; j++) {
-            fprintf(funcs_file, "int %c", inputs[j]);
-            if(j + 1 < input_count) fprintf(funcs_file, ", ");
+            fprintf(funcs_file, "    int %c = inputs[%d];\n", input_names[j], j);
         }
-        fprintf(funcs_file, ") { return %s; }\n", expr);
+        fprintf(funcs_file, "    return %s;\n}\n", expr);
     }
     fclose(funcs_file);
 
@@ -70,7 +81,6 @@ int main(void) {
         return 1;
     }
     int err = waitpid(child, NULL, 0);
-    printf("after compile\n");
     if(err == -1) {
         perror("wait");
         return 1;
@@ -83,20 +93,37 @@ int main(void) {
         return 1;
     }
 
+    // Load all functions
     bool_func_t* funcs = malloc(function_count * sizeof(*funcs));
-
     for(int i = 0; i < function_count; i++) {
-        printf("%s\n", func_names[i]);
         funcs[i] = dlsym(handle, func_names[i]);
         if(*funcs[i] == NULL) {
             fprintf(stderr, "error when getting function %s: %s\n", func_names[i], dlerror());
             return 1;
         }
-
-        // TODO: Run funcs with all combinations of input values (1, 0)
-        printf("funcs[i]=%p  *funcs[i]=%p\n", (void*)funcs[i], (void*)*funcs[i]);
-        printf("%d\n", (funcs[i])(0, 1));
     }
 
+    // print header
+    for(int i = 0; i < input_count; i++) {
+        printf("%c ", input_names[i]);
+    }
+    printf("|");
+    for(int i = 0; i < function_count; i++) {
+        printf(" Y%d", i);
+    }
+    printf("\n--------------\n");
+
+    // print values
+    for(int i = 0; i < pow(2, input_count); i++) {
+        int* bits = bits_from_int(i, input_count);
+        for(int j = 0; j < input_count; j++) {
+            printf("%d ", bits[j]);
+        }
+        printf("|");
+        for(int j = 0; j < function_count; j++) {
+            printf(" %d ", (funcs[j])(bits, input_count));
+        }
+        printf("\n");
+    }
     return 0;
 }

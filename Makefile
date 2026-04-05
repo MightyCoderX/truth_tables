@@ -1,6 +1,6 @@
 CC := gcc
 CFLAGS := -std=c99 -Wall -Wextra -pedantic
-LIBS := -ldl -lreadline
+LIBS := -ldl -lreadline -lm
 
 main: main.c
 	${CC} ${CFLAGS} ${LIBS} $^ -o $@
