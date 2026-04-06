@@ -1,3 +1,4 @@
 main
 funcs.c
 funcs.so
+.gdb_history

@@ -1,5 +1,5 @@
 CC := gcc
-CFLAGS := -std=c99 -Wall -Wextra -fsanitize=undefined
+CFLAGS := -std=c99 -Wall -Wextra -fsanitize=undefined -g
 LIBS := -ldl -lm
 
 main: main.c

@@ -1,0 +1,15 @@
+# input variables
+a,b,c,d;
+
+# first output
+y0 = a(b+c);
+y1 = (a+b)(c+d); # nested parens
+
+# arithmetic operators
+y2 = a+b ; # space before semicolon
+y3 = a*b;
+
+# not operator
+y4 = !a+b;
+y5 = !!a; # chained not
+# end

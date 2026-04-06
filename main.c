@@ -9,13 +9,20 @@
 #include <dlfcn.h>
 #include <string.h>
 #include <unistd.h>
+#include <fcntl.h>
+#include <sys/stat.h>
 #include <sys/types.h>
 #include <sys/wait.h>
+#include <sys/mman.h>
 
 // TODO:Consider using arenas for allocation
 
 #define ERROR(fmt, ...) fprintf(stderr, fmt, ##__VA_ARGS__)
-#define PARSE_ERROR(lineno, fmt, ...) ERROR("ERROR: line %d: " fmt, (lineno), ##__VA_ARGS__)
+#define PARSE_ERROR(loc, fmt, ...)                                                                                     \
+    ERROR("PARSING ERROR: at %s:%zu:%zu: " fmt, (loc.filename), (loc.lineno), (loc.colno), ##__VA_ARGS__)
+#define PANIC(fmt, ...)                                                                                                \
+    ERROR("PANIC: %s():%d: " fmt, __func__, __LINE__, ##__VA_ARGS__);                                                  \
+    abort();
 
 typedef int (*bool_func_t)(int* inputs);
 
@@ -36,14 +43,15 @@ typedef struct {
 ChrVec* chrvec_new() {
     ChrVec* vec = malloc(sizeof(*vec));
     vec->size = 0;
-    vec->capacity = 1;
+    vec->capacity = 10;
     vec->chars = malloc(vec->capacity);
     assert(vec->chars != NULL && "Buy more RAM");
 
     return vec;
 }
 
-void chrvec_extend(ChrVec* vec) {
+void chrvec_extend(ChrVec* vec, size_t amount) {
+    vec->capacity += amount;
     vec->capacity = ceil((float)vec->capacity * 1.5);
     vec->chars = realloc(vec->chars, vec->capacity);
     assert(vec->chars != NULL && "Buy more RAM");
@@ -51,7 +59,7 @@ void chrvec_extend(ChrVec* vec) {
 
 void chrvec_append(ChrVec* vec, char c) {
     if(vec->size >= vec->capacity) {
-        chrvec_extend(vec);
+        chrvec_extend(vec, 0);
     }
 
     vec->chars[vec->size] = c;
@@ -61,7 +69,7 @@ void chrvec_append(ChrVec* vec, char c) {
 void chrvec_cat(ChrVec* vec, const char* str) {
     int len = strlen(str);
     if(vec->size + len >= vec->capacity) {
-        chrvec_extend(vec);
+        chrvec_extend(vec, len);
     }
     strcat(vec->chars, str);
     vec->size += len;
@@ -98,31 +106,85 @@ void strvec_append(StringVec* vec, const char* str) {
         vec->strings = realloc(vec->strings, vec->capacity * sizeof(char*));
         assert(vec->strings != NULL && "Buy more RAM");
     }
-
     vec->strings[vec->size] = malloc(strlen(str));
     strcpy(vec->strings[vec->size], str);
     vec->size++;
 }
 
+typedef struct {
+    char* filename;
+    char* bytes;
+    size_t size;
+    size_t cur;
+} FileBuf;
+
+FileBuf* fbuf_new(const char* filename, char* bytes, size_t size) {
+    FileBuf* fbuf = malloc(sizeof(*fbuf));
+    fbuf->filename = malloc(strlen(filename));
+    strcpy(fbuf->filename, filename);
+    fbuf->bytes = bytes;
+    fbuf->size = size;
+    fbuf->cur = 0;
+
+    return fbuf;
+}
+
+void fbuf_rseek(FileBuf* fbuf, long amount) {
+    long idx = fbuf->cur + amount;
+    if(idx < 0 || idx >= (long)fbuf->size) {
+        PANIC("index %ld out of bounds [0,%zu]\n", idx, fbuf->size);
+    }
+    fbuf->cur += amount;
+}
+
+char fbuf_getc(FileBuf* fbuf, long idx) {
+    if(idx < 0 || idx >= (long)fbuf->size) {
+        PANIC("index %ld out of bounds [0,%zu]\n", idx, fbuf->size);
+    }
+    return fbuf->bytes[idx];
+}
+
+char fbuf_nextc(FileBuf* fbuf) {
+    if(fbuf->cur >= fbuf->size) {
+        return EOF;
+    }
+
+    return fbuf->bytes[fbuf->cur++];
+}
+
+typedef struct {
+    const char* filename;
+    size_t lineno;
+    size_t colno;
+} Location;
+
 // TODO: Fix lexing and parsing to reduce branching and allow for sorrounding with parentheses
 // the current sub-expression when needed (see ANDs added automatically when two variables
 // are unpacked from same token (eg. `ab` -> `a && b` should be `(a && b)` instead))
-ssize_t parse_expr_file(FILE* expr_file, ChrVec* out_inputs, StringVec* out_exprs, StringVec* out_outputs) {
-    ChrVec* buf = chrvec_new();
+ssize_t parse_expr_file(FileBuf* fbuf, ChrVec* out_inputs, StringVec* out_exprs, StringVec* out_outputs) {
+    ChrVec* tokbuf = chrvec_new();
     int stmt_num = 0;
-    int lineno = 1;
+    Location loc = {
+        .filename = fbuf->filename,
+        .lineno = 1,
+        .colno = 0,
+    };
     char c;
-    while((c = fgetc(expr_file)) != EOF) {
+    while((c = fbuf_nextc(fbuf)) != EOF) {
         if(c == '\n') {
-            lineno++;
+            loc.colno = 0;
+            loc.lineno++;
             continue;
         }
 
+        loc.colno++;
+
         if(c == '#') {
             char nc;
-            while((nc = fgetc(expr_file)) != '\n')
+            while((nc = fbuf_nextc(fbuf)) != '\n')
                 ;
-            fseek(expr_file, -1, SEEK_CUR);
+            fbuf_rseek(fbuf, -1); // don't eat newline
+            continue;
         }
 
         if(stmt_num == 0) { // inputs
@@ -132,59 +194,56 @@ ssize_t parse_expr_file(FILE* expr_file, ChrVec* out_inputs, StringVec* out_expr
                 if(c == ';') stmt_num++;
                 continue;
             } else {
-                PARSE_ERROR(lineno, "invalid character '%c' expected comma separated input names\n", c);
+                PARSE_ERROR(loc, "invalid character '%c' expected comma separated input names\n", c);
                 return -1;
             }
         } else { // expressions
             if(isalpha(c)) {
-                chrvec_append(buf, c);
+                chrvec_append(tokbuf, c);
             } else if(isalnum(c)) {
-                if(buf->size > 0 && isalpha(buf->chars[buf->size - 1])) {
-                    chrvec_append(buf, c);
+                if(tokbuf->size > 0 && isalpha(tokbuf->chars[tokbuf->size - 1])) {
+                    chrvec_append(tokbuf, c);
                 } else {
-                    PARSE_ERROR(lineno, "invalid character '%c' identifier must begin with a letter\n", c);
+                    PARSE_ERROR(loc, "invalid character '%c' identifier must begin with a letter\n", c);
                     return -1;
                 }
             } else if(c == '=') {
-                strvec_append(out_outputs, buf->chars);
-                buf = chrvec_new();
+                strvec_append(out_outputs, tokbuf->chars);
+                tokbuf = chrvec_new();
                 ChrVec* c_expr = chrvec_new();
-                while((c = fgetc(expr_file)) != ';') {
+                while((c = fbuf_nextc(fbuf)) != ';') {
                     if(c == EOF) {
-                        PARSE_ERROR(lineno, "missing ';'\n");
+                        PARSE_ERROR(loc, "missing ';'\n");
                         return -1;
                     }
 
                     // parse expression a
                     if(isalpha(c)) {
                         if(!chrvec_contains(out_inputs, c)) {
-                            PARSE_ERROR(lineno, "undefined input %c\n", c);
+                            PARSE_ERROR(loc, "undefined input %c\n", c);
                             return -1;
                         }
                         chrvec_append(c_expr, c);
-                        char nc = fgetc(expr_file);
+                        char nc = fbuf_nextc(fbuf);
                         if(isalpha(nc) || nc == '!' || nc == '(') {
-                            if(nc == '(') {
-                                fseek(expr_file, -1, SEEK_CUR);
-                            }
                             chrvec_cat(c_expr, " && ");
                             if(nc == '!') {
-                                nc = fgetc(expr_file);
+                                nc = fbuf_nextc(fbuf);
                                 chrvec_append(c_expr, '!');
                             }
                             chrvec_append(c_expr, nc);
+                        } else if(nc == ' ') {
+                            // do nothing
                         } else {
-                            fseek(expr_file, -1, SEEK_CUR);
+                            fbuf_rseek(fbuf, -1);
                         }
-                    } else if(c
-                        == '+') { // TODO:fix this, someone is eating this char or other logic problem only happens when reading from stdin or pipe
+                    } else if(c == '+') {
                         chrvec_cat(c_expr, " || ");
-                    } else if(c
-                        == '*') { // TODO:fix this, someone is eating this char or other logic problem only happens when reading from stdin or pipe
+                    } else if(c == '*') {
                         chrvec_cat(c_expr, " && ");
                     } else if(c == '(' || c == ')' || c == '!') {
                         if(c == ')') {
-                            char nc = fgetc(expr_file);
+                            char nc = fbuf_nextc(fbuf);
                             if(nc == '(') {
                                 chrvec_cat(c_expr, ") && (");
                             } else if(nc == '!') {
@@ -192,20 +251,20 @@ ssize_t parse_expr_file(FILE* expr_file, ChrVec* out_inputs, StringVec* out_expr
                                 chrvec_cat(tmp, ") && ");
                                 do {
                                     chrvec_append(tmp, nc);
-                                } while((nc = fgetc(expr_file)) == '!');
+                                } while((nc = fbuf_nextc(fbuf)) == '!');
 
                                 if(nc == '(') {
                                     chrvec_append(tmp, nc);
                                     chrvec_cat(c_expr, tmp->chars);
                                     free(tmp->chars);
                                 } else {
-                                    fseek(expr_file, -1, SEEK_CUR);
+                                    fbuf_rseek(fbuf, -1);
                                 }
                             } else if(isalpha(nc)) {
                                 chrvec_cat(c_expr, ") && ");
-                                fseek(expr_file, -1, SEEK_CUR);
+                                fbuf_rseek(fbuf, -1);
                             } else {
-                                fseek(expr_file, -1, SEEK_CUR);
+                                fbuf_rseek(fbuf, -1);
                                 chrvec_append(c_expr, c);
                             }
                         } else {
@@ -223,6 +282,21 @@ ssize_t parse_expr_file(FILE* expr_file, ChrVec* out_inputs, StringVec* out_expr
     return 0;
 }
 
+FileBuf* read_file(const char* filename, FILE* file) {
+    ChrVec* bytes = chrvec_new();
+
+    size_t size = 0;
+    char c;
+    while((c = fgetc(file)) != EOF) {
+        chrvec_append(bytes, c);
+        size++;
+    }
+
+    printf("size: %zu\n", size);
+
+    return fbuf_new(filename, bytes->chars, size);
+}
+
 int main(int argc, char** argv) {
     if(argc > 2) {
         ERROR("usage: %s [expr_file]\n", argv[0]);
@@ -231,12 +305,13 @@ int main(int argc, char** argv) {
 
     // TODO: Map whole file to memory before parsing, to allow seeking
     // (change signature of `parse_expr_file` function to accept pointer to bytes)
-    FILE* expr_file;
+
+    FILE* expr_file = stdin;
+    char* filename = "stdin";
 
     if(argc == 2) {
+        filename = argv[1];
         expr_file = fopen(argv[1], "r");
-    } else {
-        expr_file = stdin;
     }
 
     if(expr_file == NULL) {
@@ -244,11 +319,17 @@ int main(int argc, char** argv) {
         return 1;
     }
 
+    FileBuf* fbuf = read_file(filename, expr_file);
+
+    if(fbuf == NULL) {
+        return 1;
+    }
+
     ChrVec* inputs = chrvec_new();
     StringVec* exprs = strvec_new();
     StringVec* outputs = strvec_new();
 
-    ssize_t err = parse_expr_file(expr_file, inputs, exprs, outputs);
+    ssize_t err = parse_expr_file(fbuf, inputs, exprs, outputs);
     if(err == -1) {
         return 1;
     }
