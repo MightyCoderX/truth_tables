@@ -359,7 +359,7 @@ int main(int argc, char** argv) {
 
         strvec_append(func_names, func);
 
-        fprintf(funcs_file, "int %s(int* inputs, size_t len) {\n", func);
+        fprintf(funcs_file, "int %s(int* inputs) {\n", func);
         for(size_t j = 0; j < inputs->size; j++) {
             fprintf(funcs_file, "    int %c = inputs[%zu];\n", inputs->chars[j], j);
         }
