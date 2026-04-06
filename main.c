@@ -34,6 +34,7 @@ int* bits_from_int(int num, int n_bits) {
 
     return bits;
 }
+
 typedef struct {
     size_t size;
     size_t capacity;
@@ -396,6 +397,7 @@ int main(int argc, char** argv) {
         perror("wait");
         return 1;
     }
+    unlink("./funcs.c");
 
     // Open file with dlopen
     void* handle = dlopen("./funcs.so", RTLD_NOW);
@@ -413,6 +415,7 @@ int main(int argc, char** argv) {
             return 1;
         }
     }
+    unlink("./funcs.so");
 
     /* Print table */
 
