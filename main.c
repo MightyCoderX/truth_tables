@@ -298,10 +298,15 @@ FileBuf* read_file(const char* filename, FILE* file) {
     return fbuf_new(filename, bytes->chars, size);
 }
 
-int main(int argc, char** argv) {
+typedef struct {
+    char* expr_filename;
+    FILE* expr_file;
+} Args;
+
+void parse_args(int argc, char** argv, Args* out_args) {
     if(argc > 2) {
         ERROR("usage: %s [expr_file]\n", argv[0]);
-        return 1;
+        exit(1);
     }
 
     // TODO: Map whole file to memory before parsing, to allow seeking
@@ -317,41 +322,23 @@ int main(int argc, char** argv) {
 
     if(expr_file == NULL) {
         perror("fopen");
-        return 1;
+        exit(1);
     }
 
-    FileBuf* fbuf = read_file(filename, expr_file);
+    out_args->expr_filename = filename;
+    out_args->expr_file = expr_file;
+}
 
-    if(fbuf == NULL) {
-        return 1;
-    }
-
-    ChrVec* inputs = chrvec_new();
-    StringVec* exprs = strvec_new();
-    StringVec* outputs = strvec_new();
-
-    ssize_t err = parse_expr_file(fbuf, inputs, exprs, outputs);
-    if(err == -1) {
-        return 1;
-    }
-
-    printf("Inputs:\n    ");
-    for(size_t i = 0; i < inputs->size; i++) {
-        printf("%c ", inputs->chars[i]);
-    }
-    printf("\n");
-
-    printf("Functions:\n");
-    for(size_t i = 0; i < exprs->size; i++) {
-        printf("    %s = %s\n", outputs->strings[i], exprs->strings[i]);
-    }
-    printf("\n");
-
+void generate_c_file(ChrVec* inputs, StringVec* exprs, StringVec* func_names) {
     FILE* funcs_file = fopen("funcs.c", "w");
+
+    if(funcs_file == NULL) {
+        perror("fopen");
+        exit(1);
+    }
+
     fprintf(funcs_file, "#include <stddef.h>\n");
     fprintf(funcs_file, "\n");
-
-    StringVec* func_names = strvec_new();
 
     for(size_t i = 0; i < exprs->size; i++) {
         char* func = malloc(22);
@@ -368,15 +355,16 @@ int main(int argc, char** argv) {
         fprintf(funcs_file, "\n");
     }
     fclose(funcs_file);
+}
 
+void compile_c_to_so() {
     // TODO:Compile functions all in memory using `gcc - -o -` and mmap to load the output
     // into an executable memory page
 
-    // Compile .c file with functions to .so
     pid_t child = fork();
     if(child == -1) {
         perror("fork");
-        return 1;
+        exit(1);
     }
     if(child == 0) {
         int err = execlp("gcc", "gcc", //
@@ -390,35 +378,36 @@ int main(int argc, char** argv) {
         if(err == -1) {
             perror("execlp");
         }
-        return 1;
+        exit(1);
     }
-    err = waitpid(child, NULL, 0);
+    int err = waitpid(child, NULL, 0);
     if(err == -1) {
         perror("wait");
-        return 1;
+        exit(1);
     }
     unlink("./funcs.c");
+}
 
+void load_funcs_from_so(StringVec* exprs, StringVec* func_names, bool_func_t* funcs) {
     // Open file with dlopen
     void* handle = dlopen("./funcs.so", RTLD_NOW);
     if(handle == NULL) {
         ERROR("dlopen failed: %s\n", dlerror());
-        return 1;
+        exit(1);
     }
 
     // Load all functions
-    bool_func_t* funcs = malloc(exprs->size * sizeof(*funcs));
     for(size_t i = 0; i < exprs->size; i++) {
         funcs[i] = dlsym(handle, func_names->strings[i]);
         if(*funcs[i] == NULL) {
             ERROR("error when getting function %s: %s\n", func_names->strings[i], dlerror());
-            return 1;
+            exit(1);
         }
     }
     unlink("./funcs.so");
+}
 
-    /* Print table */
-
+void generate_truth_table(ChrVec* inputs, StringVec* exprs, StringVec* outputs, bool_func_t* funcs) {
     // print header
     for(size_t i = 0; i < inputs->size; i++) {
         printf("%c ", inputs->chars[i]);
@@ -441,5 +430,46 @@ int main(int argc, char** argv) {
         }
         printf("\n");
     }
+}
+
+int main(int argc, char** argv) {
+    Args args = { 0 };
+    parse_args(argc, argv, &args);
+
+    FileBuf* fbuf = read_file(args.expr_filename, args.expr_file);
+    if(fbuf == NULL) {
+        return 1;
+    }
+
+    ChrVec* inputs = chrvec_new();
+    StringVec* exprs = strvec_new();
+    StringVec* outputs = strvec_new();
+    ssize_t err = parse_expr_file(fbuf, inputs, exprs, outputs);
+    if(err == -1) {
+        return 1;
+    }
+
+    printf("Inputs:\n    ");
+    for(size_t i = 0; i < inputs->size; i++) {
+        printf("%c ", inputs->chars[i]);
+    }
+    printf("\n");
+
+    printf("Functions:\n");
+    for(size_t i = 0; i < exprs->size; i++) {
+        printf("    %s = %s\n", outputs->strings[i], exprs->strings[i]);
+    }
+    printf("\n");
+
+    StringVec* func_names = strvec_new();
+    generate_c_file(inputs, exprs, func_names);
+
+    compile_c_to_so();
+
+    bool_func_t* funcs = malloc(exprs->size * sizeof(*funcs));
+    load_funcs_from_so(exprs, func_names, funcs);
+
+    generate_truth_table(inputs, exprs, outputs, funcs);
+
     return 0;
 }
