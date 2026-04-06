@@ -1,0 +1,9 @@
+a, b, c, d;
+
+y0 = a + bc;
+y1 = b + cd;
+y2 = !ab + a!b;
+y3 = (a + b) * (b + c);
+y4 = (b + c)(a*b)!!(bc + a)ab;
+#y5 = bc(a + b);
+
