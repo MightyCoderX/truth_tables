@@ -1,15 +1,18 @@
 CC := gcc
-CFLAGS := -std=c99 -Wall -Wextra -fsanitize=undefined -g
-LIBS := -ldl -lm
+CFLAGS := -std=c99 -Wall -Wextra -fsanitize=undefined
 
-main: main.c
+LIBS := -ldl -lm
+EXE_NAME := ttable
+
+${EXE_NAME}: main.c
 	${CC} ${CFLAGS} ${LIBS} $^ -o $@
 
-run: main
-	./main
+run: ${EXE_NAME}
+	./${EXE_NAME}
 
-debug: main
-	gdb ./main
+debug:
+	${CC} ${CFLAGS} ${LIBS} $^ -o ${EXE_NAME} -ggdb
+	gdb ./ttable
 
 clean: main
 	rm main
