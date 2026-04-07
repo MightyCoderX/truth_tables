@@ -8,3 +8,9 @@ a, b, c, d; # define input variables
 
 y0 = ab + cd; # define output functions
 ```
+
+## Build
+
+```shell
+make
+```
