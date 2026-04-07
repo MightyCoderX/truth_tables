@@ -107,7 +107,7 @@ void strvec_append(StringVec* vec, const char* str) {
         vec->strings = realloc(vec->strings, vec->capacity * sizeof(char*));
         assert(vec->strings != NULL && "Buy more RAM");
     }
-    vec->strings[vec->size] = malloc(strlen(str));
+    vec->strings[vec->size] = malloc(strlen(str) + 1);
     strcpy(vec->strings[vec->size], str);
     vec->size++;
 }
@@ -121,7 +121,9 @@ typedef struct {
 
 FileBuf* fbuf_new(const char* filename, char* bytes, size_t size) {
     FileBuf* fbuf = malloc(sizeof(*fbuf));
-    fbuf->filename = malloc(strlen(filename));
+    assert(fbuf != NULL && "Buy more RAM");
+    fbuf->filename = malloc(strlen(filename) + 1);
+    assert(fbuf->filename != NULL && "Buy more RAM");
     strcpy(fbuf->filename, filename);
     fbuf->bytes = bytes;
     fbuf->size = size;
@@ -162,7 +164,11 @@ typedef struct {
 // TODO: Fix lexing and parsing to reduce branching and allow for sorrounding with parentheses
 // the current sub-expression when needed (see ANDs added automatically when two variables
 // are unpacked from same token (eg. `ab` -> `a && b` should be `(a && b)` instead))
-ssize_t parse_expr_file(FileBuf* fbuf, ChrVec* out_inputs, StringVec* out_exprs, StringVec* out_outputs) {
+void parse_expr_file(FileBuf* fbuf, ChrVec** out_inputs, StringVec** out_exprs, StringVec** out_outputs) {
+    *out_inputs = chrvec_new();
+    *out_exprs = strvec_new();
+    *out_outputs = strvec_new();
+
     ChrVec* tokbuf = chrvec_new();
     int stmt_num = 0;
     Location loc = {
@@ -190,13 +196,13 @@ ssize_t parse_expr_file(FileBuf* fbuf, ChrVec* out_inputs, StringVec* out_exprs,
 
         if(stmt_num == 0) { // inputs
             if(isalpha(c)) {
-                chrvec_append(out_inputs, c);
+                chrvec_append(*out_inputs, c);
             } else if(c == ',' || c == ';' || c == ' ') {
                 if(c == ';') stmt_num++;
                 continue;
             } else {
                 PARSE_ERROR(loc, "invalid character '%c' expected comma separated input names\n", c);
-                return -1;
+                exit(1);
             }
         } else { // expressions
             if(isalpha(c)) {
@@ -206,23 +212,23 @@ ssize_t parse_expr_file(FileBuf* fbuf, ChrVec* out_inputs, StringVec* out_exprs,
                     chrvec_append(tokbuf, c);
                 } else {
                     PARSE_ERROR(loc, "invalid character '%c' identifier must begin with a letter\n", c);
-                    return -1;
+                    exit(1);
                 }
             } else if(c == '=') {
-                strvec_append(out_outputs, tokbuf->chars);
+                strvec_append(*out_outputs, tokbuf->chars);
                 tokbuf = chrvec_new();
                 ChrVec* c_expr = chrvec_new();
                 while((c = fbuf_nextc(fbuf)) != ';') {
                     if(c == EOF) {
                         PARSE_ERROR(loc, "missing ';'\n");
-                        return -1;
+                        exit(1);
                     }
 
                     // parse expression a
                     if(isalpha(c)) {
-                        if(!chrvec_contains(out_inputs, c)) {
+                        if(!chrvec_contains(*out_inputs, c)) {
                             PARSE_ERROR(loc, "undefined input %c\n", c);
-                            return -1;
+                            exit(1);
                         }
                         chrvec_append(c_expr, c);
                         char nc = fbuf_nextc(fbuf);
@@ -275,15 +281,25 @@ ssize_t parse_expr_file(FileBuf* fbuf, ChrVec* out_inputs, StringVec* out_exprs,
                 }
                 stmt_num++;
 
-                strvec_append(out_exprs, c_expr->chars);
+                strvec_append(*out_exprs, c_expr->chars);
             }
         }
     }
 
-    return 0;
+    printf("Inputs:\n    ");
+    for(size_t i = 0; i < (*out_inputs)->size; i++) {
+        printf("%c ", (*out_inputs)->chars[i]);
+    }
+    printf("\n");
+
+    printf("Functions:\n");
+    for(size_t i = 0; i < (*out_exprs)->size; i++) {
+        printf("    %s = %s\n", (*out_outputs)->strings[i], (*out_exprs)->strings[i]);
+    }
+    printf("\n");
 }
 
-FileBuf* read_file(const char* filename, FILE* file) {
+void read_expr_file(const char* filename, FILE* file, FileBuf** fbuf) {
     ChrVec* bytes = chrvec_new();
 
     size_t size = 0;
@@ -295,7 +311,10 @@ FileBuf* read_file(const char* filename, FILE* file) {
 
     printf("size: %zu\n", size);
 
-    return fbuf_new(filename, bytes->chars, size);
+    *fbuf = fbuf_new(filename, bytes->chars, size);
+    if(fbuf == NULL) {
+        exit(1);
+    }
 }
 
 typedef struct {
@@ -329,7 +348,8 @@ void parse_args(int argc, char** argv, Args* out_args) {
     out_args->expr_file = expr_file;
 }
 
-void generate_c_file(ChrVec* inputs, StringVec* exprs, StringVec* func_names) {
+void generate_c_file(ChrVec* inputs, StringVec* exprs, StringVec** func_names) {
+    *func_names = strvec_new();
     FILE* funcs_file = fopen("funcs.c", "w");
 
     if(funcs_file == NULL) {
@@ -341,18 +361,20 @@ void generate_c_file(ChrVec* inputs, StringVec* exprs, StringVec* func_names) {
     fprintf(funcs_file, "\n");
 
     for(size_t i = 0; i < exprs->size; i++) {
-        char* func = malloc(22);
+        ChrVec* func = chrvec_new();
 
-        sprintf(func, "f%zu", i);
+        sprintf(func->chars, "f%zu", i);
 
-        strvec_append(func_names, func);
+        strvec_append(*func_names, func->chars);
 
-        fprintf(funcs_file, "int %s(int* inputs) {\n", func);
+        fprintf(funcs_file, "int %s(int* inputs) {\n", func->chars);
         for(size_t j = 0; j < inputs->size; j++) {
             fprintf(funcs_file, "    int %c = inputs[%zu];\n", inputs->chars[j], j);
         }
         fprintf(funcs_file, "    return %s;\n}\n", exprs->strings[i]);
         fprintf(funcs_file, "\n");
+
+        free(func->chars);
     }
     fclose(funcs_file);
 }
@@ -388,7 +410,8 @@ void compile_c_to_so() {
     unlink("./funcs.c");
 }
 
-void load_funcs_from_so(StringVec* exprs, StringVec* func_names, bool_func_t* funcs) {
+void load_funcs_from_so(StringVec* exprs, StringVec* func_names, bool_func_t** funcs) {
+    *funcs = malloc(exprs->size * sizeof(**funcs));
     // Open file with dlopen
     void* handle = dlopen("./funcs.so", RTLD_NOW);
     if(handle == NULL) {
@@ -398,8 +421,8 @@ void load_funcs_from_so(StringVec* exprs, StringVec* func_names, bool_func_t* fu
 
     // Load all functions
     for(size_t i = 0; i < exprs->size; i++) {
-        funcs[i] = dlsym(handle, func_names->strings[i]);
-        if(*funcs[i] == NULL) {
+        (*funcs)[i] = dlsym(handle, func_names->strings[i]);
+        if(funcs[i] == NULL) {
             ERROR("error when getting function %s: %s\n", func_names->strings[i], dlerror());
             exit(1);
         }
@@ -407,13 +430,13 @@ void load_funcs_from_so(StringVec* exprs, StringVec* func_names, bool_func_t* fu
     unlink("./funcs.so");
 }
 
-void generate_truth_table(ChrVec* inputs, StringVec* exprs, StringVec* outputs, bool_func_t* funcs) {
+void generate_truth_table(ChrVec* inputs, StringVec* outputs, bool_func_t* funcs) {
     // print header
     for(size_t i = 0; i < inputs->size; i++) {
         printf("%c ", inputs->chars[i]);
     }
     printf("|");
-    for(size_t i = 0; i < exprs->size; i++) {
+    for(size_t i = 0; i < outputs->size; i++) {
         printf(" %s", outputs->strings[i]);
     }
     printf("\n");
@@ -425,7 +448,7 @@ void generate_truth_table(ChrVec* inputs, StringVec* exprs, StringVec* outputs, 
             printf("%d ", bits[j]);
         }
         printf("|");
-        for(size_t j = 0; j < exprs->size; j++) {
+        for(size_t j = 0; j < outputs->size; j++) {
             printf(" %d ", (funcs[j])(bits));
         }
         printf("\n");
@@ -434,42 +457,22 @@ void generate_truth_table(ChrVec* inputs, StringVec* exprs, StringVec* outputs, 
 
 int main(int argc, char** argv) {
     Args args = { 0 };
+    FileBuf* fbuf;
+    ChrVec* inputs;
+    StringVec *exprs, *outputs;
+    StringVec* func_names;
+    bool_func_t* funcs;
+
     parse_args(argc, argv, &args);
 
-    FileBuf* fbuf = read_file(args.expr_filename, args.expr_file);
-    if(fbuf == NULL) {
-        return 1;
-    }
+    read_expr_file(args.expr_filename, args.expr_file, &fbuf);
+    parse_expr_file(fbuf, &inputs, &exprs, &outputs);
 
-    ChrVec* inputs = chrvec_new();
-    StringVec* exprs = strvec_new();
-    StringVec* outputs = strvec_new();
-    ssize_t err = parse_expr_file(fbuf, inputs, exprs, outputs);
-    if(err == -1) {
-        return 1;
-    }
-
-    printf("Inputs:\n    ");
-    for(size_t i = 0; i < inputs->size; i++) {
-        printf("%c ", inputs->chars[i]);
-    }
-    printf("\n");
-
-    printf("Functions:\n");
-    for(size_t i = 0; i < exprs->size; i++) {
-        printf("    %s = %s\n", outputs->strings[i], exprs->strings[i]);
-    }
-    printf("\n");
-
-    StringVec* func_names = strvec_new();
-    generate_c_file(inputs, exprs, func_names);
-
+    generate_c_file(inputs, exprs, &func_names);
     compile_c_to_so();
 
-    bool_func_t* funcs = malloc(exprs->size * sizeof(*funcs));
-    load_funcs_from_so(exprs, func_names, funcs);
-
-    generate_truth_table(inputs, exprs, outputs, funcs);
+    load_funcs_from_so(exprs, func_names, &funcs);
+    generate_truth_table(inputs, outputs, funcs);
 
     return 0;
 }
