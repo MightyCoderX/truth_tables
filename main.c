@@ -309,6 +309,7 @@ void read_expr_file(const char* filename, FILE* file, FileBuf* fbuf) {
         size++;
     }
 
+    // TODO: Move this allocation out of the function
     *fbuf = fbuf_new(filename, bytes.chars, size);
     if(fbuf == NULL) {
         exit(1);
