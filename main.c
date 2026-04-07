@@ -15,7 +15,7 @@
 #include <sys/wait.h>
 #include <sys/mman.h>
 
-// TODO:Consider using arenas for allocation
+// TODO: Consider using arenas for allocation
 
 #define ERROR(fmt, ...) fprintf(stderr, fmt, ##__VA_ARGS__)
 #define PARSE_ERROR(loc, fmt, ...)                                                                                     \
@@ -380,7 +380,7 @@ void generate_c_file(ChrVec* inputs, StringVec* exprs, StringVec** func_names) {
 }
 
 void compile_c_to_so() {
-    // TODO:Compile functions all in memory using `gcc - -o -` and mmap to load the output
+    // TODO: Compile functions all in memory using `gcc - -o -` and mmap to load the output
     // into an executable memory page
 
     pid_t child = fork();
@@ -462,6 +462,8 @@ int main(int argc, char** argv) {
     StringVec *exprs, *outputs;
     StringVec* func_names;
     bool_func_t* funcs;
+    // TODO: DON'T exit() in functions, handle errors outside using macros for error codes
+    // TODO: Pull allocations out of functions
 
     parse_args(argc, argv, &args);
 
