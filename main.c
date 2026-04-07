@@ -424,7 +424,7 @@ void load_funcs_from_so(StringVec* exprs, StringVec* func_names, bool_func_t*** 
     for(size_t i = 0; i < exprs->size; i++) {
         (*funcs)[i] = dlsym(handle, func_names->strings[i]);
         if(funcs[i] == NULL) {
-            ERROR("error when getting function %s: %s\n", func_names->strings[i], dlerror());
+            ERROR("error when loading function %s: %s\n", func_names->strings[i], dlerror());
             exit(1);
         }
     }
