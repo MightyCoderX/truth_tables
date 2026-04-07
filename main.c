@@ -26,7 +26,7 @@
         abort();                                                                                                       \
     } while(0);
 
-typedef int (*bool_func_t)(int* inputs);
+typedef int(bool_func_t)(int* inputs);
 
 int* bits_from_int(int num, int n_bits) {
     int* bits = malloc(sizeof(*bits) * n_bits);
@@ -412,7 +412,7 @@ void compile_c_to_so() {
     unlink("./funcs.c");
 }
 
-void load_funcs_from_so(StringVec* exprs, StringVec* func_names, bool_func_t** funcs) {
+void load_funcs_from_so(StringVec* exprs, StringVec* func_names, bool_func_t*** funcs) {
     *funcs = malloc(exprs->size * sizeof(**funcs));
 
     void* handle = dlopen("./funcs.so", RTLD_NOW);
@@ -431,7 +431,7 @@ void load_funcs_from_so(StringVec* exprs, StringVec* func_names, bool_func_t** f
     unlink("./funcs.so");
 }
 
-void generate_truth_table(ChrVec* inputs, StringVec* outputs, bool_func_t* funcs) {
+void generate_truth_table(ChrVec* inputs, StringVec* outputs, bool_func_t** funcs) {
     // print header
     for(size_t i = 0; i < inputs->size; i++) {
         printf("%c ", inputs->chars[i]);
@@ -462,7 +462,8 @@ int main(int argc, char** argv) {
     ChrVec* inputs;
     StringVec *exprs, *outputs;
     StringVec* func_names;
-    bool_func_t* funcs;
+    bool_func_t** funcs;
+
     // TODO: DON'T exit() in functions, handle errors outside using macros for error codes
     // TODO: Pull allocations out of functions
 
