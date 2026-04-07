@@ -327,9 +327,6 @@ void parse_args(int argc, char** argv, Args* out_args) {
         exit(1);
     }
 
-    // TODO: Map whole file to memory before parsing, to allow seeking
-    // (change signature of `parse_expr_file` function to accept pointer to bytes)
-
     FILE* expr_file = stdin;
     char* filename = "stdin";
 
