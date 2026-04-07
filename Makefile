@@ -1,4 +1,5 @@
 CC := gcc
+# TODO: Remove -fsanitize in release builds
 CFLAGS := -std=c99 -Wall -Wextra -fsanitize=undefined
 
 LIBS := -ldl -lm
