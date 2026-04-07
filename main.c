@@ -310,8 +310,6 @@ void read_expr_file(const char* filename, FILE* file, FileBuf** fbuf) {
         size++;
     }
 
-    printf("size: %zu\n", size);
-
     *fbuf = fbuf_new(filename, bytes->chars, size);
     if(fbuf == NULL) {
         exit(1);
