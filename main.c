@@ -21,8 +21,10 @@
 #define PARSE_ERROR(loc, fmt, ...)                                                                                     \
     ERROR("PARSING ERROR: at %s:%zu:%zu: " fmt, (loc.filename), (loc.lineno), (loc.colno), ##__VA_ARGS__)
 #define PANIC(fmt, ...)                                                                                                \
-    ERROR("PANIC: %s():%d: " fmt, __func__, __LINE__, ##__VA_ARGS__);                                                  \
-    abort();
+    do {                                                                                                               \
+        ERROR("PANIC: %s():%d: " fmt, __func__, __LINE__, ##__VA_ARGS__);                                              \
+        abort();                                                                                                       \
+    } while(0);
 
 typedef int (*bool_func_t)(int* inputs);
 
