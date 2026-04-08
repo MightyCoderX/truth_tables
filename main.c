@@ -375,8 +375,7 @@ void generate_c_file(const ChrVec* inputs, const StringVec* exprs, StringVec* fu
 }
 
 void compile_c_to_so() {
-    // TODO: Compile functions all in memory using `gcc - -o -` and mmap to load the output
-    // into an executable memory page
+    // TODO: Compile functions all in memory using `gcc - -o -` and mmap to load the output into an executable memory page
 
     pid_t child = fork();
     if(child == -1) {
