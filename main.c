@@ -299,7 +299,7 @@ void parse_expr_file(FileBuf* fbuf, ChrVec* out_inputs, StringVec* out_exprs, St
     printf("\n");
 }
 
-void read_expr_file(const char* filename, FILE* file, FileBuf* fbuf) {
+void read_expr_file(FILE* file, FileBuf* fbuf) {
     ChrVec bytes = chrvec_new();
 
     size_t size = 0;
@@ -309,8 +309,8 @@ void read_expr_file(const char* filename, FILE* file, FileBuf* fbuf) {
         size++;
     }
 
-    // TODO: Move this allocation out of the function
-    *fbuf = fbuf_new(filename, bytes.chars, size);
+    fbuf->bytes = bytes.chars;
+    fbuf->size = size;
     if(fbuf == NULL) {
         exit(1);
     }
@@ -459,7 +459,8 @@ int main(int argc, char** argv) {
 
     parse_args(argc, argv, &args);
 
-    read_expr_file(args.expr_filename, args.expr_file, &fbuf);
+    fbuf = fbuf_new(args.expr_filename, NULL, 0);
+    read_expr_file(args.expr_file, &fbuf);
 
     inputs = chrvec_new();
     exprs = strvec_new();
