@@ -224,7 +224,7 @@ void parse_expr_file(FileBuf* fbuf, ChrVec* out_inputs, StringVec* out_exprs, St
                         exit(1);
                     }
 
-                    // parse expression a
+                    // parse expression like: ab + c
                     if(isalpha(c)) {
                         if(!chrvec_contains(out_inputs, c)) {
                             PARSE_ERROR(loc, "undefined input %c\n", c);
