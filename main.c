@@ -18,7 +18,7 @@
 
 #define ERROR(fmt, ...) fprintf(stderr, fmt, ##__VA_ARGS__)
 #define PARSE_ERROR(loc, fmt, ...)                                                                                     \
-    ERROR("PARSING ERROR: at %s:%zu:%zu: " fmt, (loc.filename), (loc.lineno), (loc.colno), ##__VA_ARGS__)
+    ERROR("PARSING ERROR: at %s:%zu:%zu: " fmt, ((loc)->filename), ((loc)->lineno), ((loc)->colno), ##__VA_ARGS__)
 #define PANIC(fmt, ...)                                                                                                \
     do {                                                                                                               \
         ERROR("PANIC: %s():%d: " fmt, __func__, __LINE__, ##__VA_ARGS__);                                              \
@@ -165,18 +165,108 @@ typedef struct {
     size_t colno;
 } Location;
 
+typedef enum {
+    INPUTS,
+    OUTPUTS,
+} ParseState;
+
+void parse_expression(
+    FileBuf* fbuf, ChrVec* tokbuf, Location* loc, ChrVec* inputs, StringVec* out_outputs, StringVec* out_exprs) {
+
+    char c = fbuf->bytes[fbuf->cur - 1];
+
+    if(isalpha(c)) {
+        chrvec_append(tokbuf, c);
+    } else if(isalnum(c)) {
+        if(tokbuf->size > 0 && isalpha(tokbuf->chars[tokbuf->size - 1])) {
+            chrvec_append(tokbuf, c);
+        } else {
+            PARSE_ERROR(loc, "invalid character '%c' identifier must begin with a letter\n", c);
+            exit(1);
+        }
+    } else if(c == '=') {
+        strvec_append(out_outputs, tokbuf->chars);
+        *tokbuf = chrvec_new();
+        ChrVec c_expr = chrvec_new();
+        while((c = fbuf_nextc(fbuf)) != ';') {
+            if(c == EOF) {
+                PARSE_ERROR(loc, "missing ';'\n");
+                exit(1);
+            }
+
+            // parse expression like: ab + c
+            if(isalpha(c)) {
+                if(!chrvec_contains(inputs, c)) {
+                    PARSE_ERROR(loc, "undefined input %c\n", c);
+                    exit(1);
+                }
+                chrvec_append(&c_expr, c);
+                char nc = fbuf_nextc(fbuf);
+                if(isalpha(nc) || nc == '!' || nc == '(') {
+                    chrvec_cat(&c_expr, " && ");
+                    if(nc == '!') {
+                        nc = fbuf_nextc(fbuf);
+                        chrvec_append(&c_expr, '!');
+                    }
+                    chrvec_append(&c_expr, nc);
+                } else if(nc == ' ') {
+                    // do nothing
+                } else {
+                    fbuf_rseek(fbuf, -1);
+                }
+            } else if(c == '+') {
+                chrvec_cat(&c_expr, " || ");
+            } else if(c == '*') {
+                chrvec_cat(&c_expr, " && ");
+            } else if(c == '(' || c == ')' || c == '!') {
+                if(c == ')') {
+                    char nc = fbuf_nextc(fbuf);
+                    if(nc == '(') {
+                        chrvec_cat(&c_expr, ") && (");
+                    } else if(nc == '!') {
+                        ChrVec tmp = chrvec_new();
+                        chrvec_cat(&tmp, ") && ");
+                        do {
+                            chrvec_append(&tmp, nc);
+                        } while((nc = fbuf_nextc(fbuf)) == '!');
+
+                        if(nc == '(') {
+                            chrvec_append(&tmp, nc);
+                            chrvec_cat(&c_expr, tmp.chars);
+                            free(tmp.chars);
+                        } else {
+                            fbuf_rseek(fbuf, -1);
+                        }
+                    } else if(isalpha(nc)) {
+                        chrvec_cat(&c_expr, ") && ");
+                        fbuf_rseek(fbuf, -1);
+                    } else {
+                        fbuf_rseek(fbuf, -1);
+                        chrvec_append(&c_expr, c);
+                    }
+                } else {
+                    chrvec_append(&c_expr, c);
+                }
+            }
+        }
+
+        strvec_append(out_exprs, c_expr.chars);
+    }
+}
+
 // TODO: Fix lexing and parsing to reduce branching and allow for sorrounding with parentheses
 // the current sub-expression when needed (see ANDs added automatically when two variables
 // are unpacked from same token (eg. `ab` -> `a && b` should be `(a && b)` instead))
 void parse_expr_file(FileBuf* fbuf, ChrVec* out_inputs, StringVec* out_exprs, StringVec* out_outputs) {
-    ChrVec tokbuf = chrvec_new();
-    int stmt_num = 0;
+    ParseState parse_state = INPUTS;
     Location loc = {
         .filename = fbuf->filename,
         .lineno = 1,
         .colno = 0,
     };
+
     char c;
+    ChrVec tokbuf = chrvec_new();
     while((c = fbuf_nextc(fbuf)) != EOF) {
         if(c == '\n') {
             loc.colno = 0;
@@ -194,95 +284,21 @@ void parse_expr_file(FileBuf* fbuf, ChrVec* out_inputs, StringVec* out_exprs, St
             continue;
         }
 
-        if(stmt_num == 0) { // inputs
+        switch(parse_state) {
+        case INPUTS:
             if(isalpha(c)) {
                 chrvec_append(out_inputs, c);
             } else if(c == ',' || c == ';' || c == ' ') {
-                if(c == ';') stmt_num++;
-                continue;
+                if(c == ';') parse_state = OUTPUTS;
             } else {
-                PARSE_ERROR(loc, "invalid character '%c' expected comma separated input names\n", c);
+                PARSE_ERROR(&loc, "invalid character '%c' expected comma separated input names\n", c);
                 exit(1);
             }
-        } else { // expressions
-            if(isalpha(c)) {
-                chrvec_append(&tokbuf, c);
-            } else if(isalnum(c)) {
-                if(tokbuf.size > 0 && isalpha(tokbuf.chars[tokbuf.size - 1])) {
-                    chrvec_append(&tokbuf, c);
-                } else {
-                    PARSE_ERROR(loc, "invalid character '%c' identifier must begin with a letter\n", c);
-                    exit(1);
-                }
-            } else if(c == '=') {
-                strvec_append(out_outputs, tokbuf.chars);
-                tokbuf = chrvec_new();
-                ChrVec c_expr = chrvec_new();
-                while((c = fbuf_nextc(fbuf)) != ';') {
-                    if(c == EOF) {
-                        PARSE_ERROR(loc, "missing ';'\n");
-                        exit(1);
-                    }
+            break;
 
-                    // parse expression like: ab + c
-                    if(isalpha(c)) {
-                        if(!chrvec_contains(out_inputs, c)) {
-                            PARSE_ERROR(loc, "undefined input %c\n", c);
-                            exit(1);
-                        }
-                        chrvec_append(&c_expr, c);
-                        char nc = fbuf_nextc(fbuf);
-                        if(isalpha(nc) || nc == '!' || nc == '(') {
-                            chrvec_cat(&c_expr, " && ");
-                            if(nc == '!') {
-                                nc = fbuf_nextc(fbuf);
-                                chrvec_append(&c_expr, '!');
-                            }
-                            chrvec_append(&c_expr, nc);
-                        } else if(nc == ' ') {
-                            // do nothing
-                        } else {
-                            fbuf_rseek(fbuf, -1);
-                        }
-                    } else if(c == '+') {
-                        chrvec_cat(&c_expr, " || ");
-                    } else if(c == '*') {
-                        chrvec_cat(&c_expr, " && ");
-                    } else if(c == '(' || c == ')' || c == '!') {
-                        if(c == ')') {
-                            char nc = fbuf_nextc(fbuf);
-                            if(nc == '(') {
-                                chrvec_cat(&c_expr, ") && (");
-                            } else if(nc == '!') {
-                                ChrVec tmp = chrvec_new();
-                                chrvec_cat(&tmp, ") && ");
-                                do {
-                                    chrvec_append(&tmp, nc);
-                                } while((nc = fbuf_nextc(fbuf)) == '!');
-
-                                if(nc == '(') {
-                                    chrvec_append(&tmp, nc);
-                                    chrvec_cat(&c_expr, tmp.chars);
-                                    free(tmp.chars);
-                                } else {
-                                    fbuf_rseek(fbuf, -1);
-                                }
-                            } else if(isalpha(nc)) {
-                                chrvec_cat(&c_expr, ") && ");
-                                fbuf_rseek(fbuf, -1);
-                            } else {
-                                fbuf_rseek(fbuf, -1);
-                                chrvec_append(&c_expr, c);
-                            }
-                        } else {
-                            chrvec_append(&c_expr, c);
-                        }
-                    }
-                }
-                stmt_num++;
-
-                strvec_append(out_exprs, c_expr.chars);
-            }
+        case OUTPUTS:
+            parse_expression(fbuf, &tokbuf, &loc, out_inputs, out_outputs, out_exprs);
+            break;
         }
     }
 
