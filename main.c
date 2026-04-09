@@ -291,7 +291,7 @@ void parse_expr_file(FileBuf* fbuf, ChrVec* out_inputs, StringVec* out_exprs, St
             } else if(c == ',' || c == ';' || c == ' ') {
                 if(c == ';') parse_state = OUTPUTS;
             } else {
-                PARSE_ERROR(&loc, "invalid character '%c' expected comma separated input names\n", c);
+                PARSE_ERROR(&loc, "invalid character '%c' expected comma separated alphabetic input names\n", c);
                 exit(1);
             }
             break;
