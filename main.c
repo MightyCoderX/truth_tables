@@ -136,18 +136,18 @@ void strvec_append(StringVec* vec, const char* str) {
 typedef struct {
     char* filename;
     char* bytes;
-    size_t size;
+    size_t len;
     size_t cur;
 } FileBuf;
 
-FileBuf fbuf_new(const char* filename, char* bytes, size_t size) {
+FileBuf fbuf_new(const char* filename, char* bytes, size_t len) {
     FileBuf fbuf;
 
     fbuf.filename = malloc(strlen(filename) + 1);
     assert(fbuf.filename != NULL && "Buy more RAM");
     strcpy(fbuf.filename, filename);
     fbuf.bytes = bytes;
-    fbuf.size = size;
+    fbuf.len = len;
     fbuf.cur = 0;
 
     return fbuf;
@@ -155,21 +155,21 @@ FileBuf fbuf_new(const char* filename, char* bytes, size_t size) {
 
 void fbuf_rseek(FileBuf* fbuf, long amount) {
     long idx = fbuf->cur + amount;
-    if(idx < 0 || idx >= (long)fbuf->size) {
-        PANIC("index %ld out of bounds [0,%zu]\n", idx, fbuf->size);
+    if(idx < 0 || idx >= (long)fbuf->len) {
+        PANIC("index %ld out of bounds [0,%zu]\n", idx, fbuf->len);
     }
     fbuf->cur += amount;
 }
 
 char fbuf_getc(FileBuf* fbuf, long idx) {
-    if(idx < 0 || idx >= (long)fbuf->size) {
-        PANIC("index %ld out of bounds [0,%zu]\n", idx, fbuf->size);
+    if(idx < 0 || idx >= (long)fbuf->len) {
+        PANIC("index %ld out of bounds [0,%zu]\n", idx, fbuf->len);
     }
     return fbuf->bytes[idx];
 }
 
 char fbuf_nextc(FileBuf* fbuf) {
-    if(fbuf->cur >= fbuf->size) {
+    if(fbuf->cur >= fbuf->len) {
         return EOF;
     }
 
@@ -343,7 +343,7 @@ void read_expr_file(FILE* file, FileBuf* fbuf) {
     }
 
     fbuf->bytes = bytes.chars;
-    fbuf->size = size;
+    fbuf->len = size;
     if(fbuf == NULL) {
         exit(1);
     }
