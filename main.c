@@ -370,7 +370,7 @@ void parse_args(int argc, char** argv, Args* out_args) {
 
     if(argc == 2) {
         filename = argv[1];
-        expr_file = fopen(argv[1], "r");
+        expr_file = fopen(filename, "r");
     }
 
     if(expr_file == NULL) {
