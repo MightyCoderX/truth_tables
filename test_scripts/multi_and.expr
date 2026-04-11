@@ -1,0 +1,8 @@
+a,b,c;
+
+y0 = !a!b!c;
+y1 = a!b!c;
+y2 = ab!c;
+y3 = abc;
+y4 = ab + bca;
+y5 = abc + ab;

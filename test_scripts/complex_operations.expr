@@ -1,0 +1,13 @@
+a,b,c,d;
+
+# xor of a and b
+xor_ab = a!b + !ab;
+
+# majority of 3 (a,b,c)
+maj = ab + bc + ac;
+
+# carry out of full adder (a,b,cin=c)
+carry = ab + ac + bc;
+
+# and-or-invert
+aoi = !(ab + cd);
