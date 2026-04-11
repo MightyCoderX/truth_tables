@@ -89,6 +89,20 @@ bool chrvec_contains(ChrVec* vec, char needle) {
     return false;
 }
 
+char chrvec_get(ChrVec* vec, long idx) {
+    size_t index = idx;
+
+    if(idx < 0L) {
+        index = vec->size + idx;
+    }
+
+    if(index >= vec->size) {
+        PANIC("index %ld out of bounds [0,%zu]\n", idx, vec->size);
+    }
+
+    return vec->chars[index];
+}
+
 typedef struct {
     size_t size;
     size_t capacity;
@@ -181,7 +195,7 @@ void parse_expression(
     if(isalpha(c)) {
         chrvec_append(tokbuf, c);
     } else if(isalnum(c)) {
-        if(tokbuf->size > 0 && isalpha(tokbuf->chars[tokbuf->size - 1])) {
+        if(tokbuf->size > 0 && isalpha(chrvec_get(tokbuf, -1))) {
             chrvec_append(tokbuf, c);
         } else {
             PARSE_ERROR(loc, "invalid character '%c' identifier must begin with a letter\n", c);
