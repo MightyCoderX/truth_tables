@@ -194,7 +194,7 @@ void parse_expression(
 
     if(isalpha(c)) {
         chrvec_append(tokbuf, c);
-    } else if(isalnum(c)) {
+    } else if(isalnum(c) || c == '_') {
         if(tokbuf->size > 0 && isalpha(chrvec_get(tokbuf, -1))) {
             chrvec_append(tokbuf, c);
         } else {
