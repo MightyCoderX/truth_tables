@@ -187,6 +187,7 @@ typedef enum {
     OUTPUTS,
 } ParseState;
 
+// TODO: rewrite parser using an expect(char) function implemented as primitives of a lexer structure
 void parse_expression(
     FileBuf* fbuf, ChrVec* tokbuf, Location* loc, ChrVec* inputs, StringVec* out_outputs, StringVec* out_exprs) {
 
