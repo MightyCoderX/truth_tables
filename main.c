@@ -268,6 +268,11 @@ void parse_expression(
         }
 
         strvec_append(out_exprs, c_expr.chars);
+    } else if(c == ' ') {
+        // ignore
+    } else {
+        PARSE_ERROR(loc, "unexpected character '%c'\n", c);
+        exit(1);
     }
 }
 
