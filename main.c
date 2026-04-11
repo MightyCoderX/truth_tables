@@ -63,20 +63,21 @@ void chrvec_extend(ChrVec* vec, size_t amount) {
 
 void chrvec_append(ChrVec* vec, char c) {
     if(vec->size >= vec->capacity) {
-        chrvec_extend(vec, 0);
+        chrvec_extend(vec, 1);
     }
 
-    vec->chars[vec->size] = c;
-    vec->size++;
+    vec->chars[vec->size++] = c;
+    vec->chars[vec->size + 1] = '\0';
 }
 
 void chrvec_cat(ChrVec* vec, const char* str) {
     int len = strlen(str);
     if(vec->size + len >= vec->capacity) {
-        chrvec_extend(vec, len);
+        chrvec_extend(vec, len + 1);
     }
-    strcat(vec->chars, str);
+    memcpy(vec->chars + vec->size, str, len);
     vec->size += len;
+    vec->chars[vec->size + 1] = '\0';
 }
 
 bool chrvec_contains(ChrVec* vec, char needle) {
@@ -111,8 +112,10 @@ void strvec_append(StringVec* vec, const char* str) {
         vec->strings = realloc(vec->strings, vec->capacity * sizeof(char*));
         assert(vec->strings != NULL && "Buy more RAM");
     }
-    vec->strings[vec->size] = malloc(strlen(str) + 1);
-    strcpy(vec->strings[vec->size], str);
+    size_t len = strlen(str);
+    vec->strings[vec->size] = malloc(len + 1);
+    memcpy(vec->strings[vec->size], str, len);
+    vec->strings[vec->size][len] = '\0';
     vec->size++;
 }
 
@@ -201,15 +204,15 @@ void parse_expression(
                     exit(1);
                 }
                 chrvec_append(&c_expr, c);
-                char nc = fbuf_nextc(fbuf);
-                if(isalpha(nc) || nc == '!' || nc == '(') {
+                char nextc = fbuf_nextc(fbuf);
+                if(isalpha(nextc) || nextc == '!' || nextc == '(') {
                     chrvec_cat(&c_expr, " && ");
-                    if(nc == '!') {
-                        nc = fbuf_nextc(fbuf);
+                    if(nextc == '!') {
                         chrvec_append(&c_expr, '!');
+                    } else {
+                        fbuf_rseek(fbuf, -1);
                     }
-                    chrvec_append(&c_expr, nc);
-                } else if(nc == ' ') {
+                } else if(nextc == ' ') {
                     // do nothing
                 } else {
                     fbuf_rseek(fbuf, -1);
