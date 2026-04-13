@@ -16,10 +16,14 @@
 
 // TODO: Consider using arenas for allocation
 
+#ifndef KEEP_FILES
+#define KEEP_FILES 0
+#endif /* ifndef KEEP_FILES */
+
 #define ERROR(fmt, ...) fprintf(stderr, fmt, ##__VA_ARGS__)
 #define PARSE_ERROR(lex, fmt, ...)                                                                                     \
-    ERROR("PARSING ERROR: at %s:%zu:%zu: " fmt, (((lex)->fbuf)->filename), (((lex)->loc).lineno),                      \
-        (((lex)->loc).colno), ##__VA_ARGS__)
+    lex_print(lex);                                                                                                    \
+    ERROR("PARSING ERROR: " fmt, ##__VA_ARGS__);
 #define PANIC(fmt, ...)                                                                                                \
     do {                                                                                                               \
         ERROR("PANIC: %s():%d: " fmt, __func__, __LINE__, ##__VA_ARGS__);                                              \
@@ -220,6 +224,38 @@ Lexer lex_new(FileBuf* fbuf) {
     };
 }
 
+void lex_print(Lexer* lex) {
+    char* fmt = "%s:%zu:%zu:\n    ";
+    int fmt_len = strlen(fmt) + 1;
+    char* str = malloc(fmt_len);
+    int len = snprintf(str, fmt_len, fmt, lex->fbuf->filename, lex->loc.lineno, lex->loc.colno);
+    len++;
+    str = realloc(str, len);
+    snprintf(str, len, fmt, lex->fbuf->filename, lex->loc.lineno, lex->loc.colno);
+    printf("%s", str);
+
+    char c;
+    size_t line_start = 0L;
+    if(lex->fbuf->cur > 0L) {
+        line_start = lex->fbuf->cur;
+        do {
+            line_start--;
+            c = fbuf_getc(lex->fbuf, line_start);
+        } while(c != '\n' && line_start > 0);
+    }
+    size_t line_len = line_start;
+    while((c = fbuf_getc(lex->fbuf, line_len)) != '\n' && line_len < lex->fbuf->len) {
+        putchar(c);
+        line_len++;
+    }
+    printf("\n");
+    for(size_t i = 0; i < (lex->loc.colno - 1 + 4); i++) {
+        putchar(' ');
+    }
+    putchar('^');
+    putchar('\n');
+}
+
 char lex_getcur(Lexer* lex) {
     return lex->fbuf->bytes[lex->fbuf->cur];
 }
@@ -333,10 +369,33 @@ void parse_inputs(Lexer* lex, Parser* parser) {
 }
 
 void parse_expression(Lexer* lex, Parser* parser) {
-    // TODO:recursively parse expression
-    (void)lex;
-    (void)parser;
-    strvec_append(&parser->expressions, "1");
+    bool stop = false;
+    ChrVec c_expr = chrvec_new();
+    while(!stop) {
+        lex_skip_space(lex);
+        char c = lex_peek_char(lex);
+        printf("'%c'\n", c);
+        if(isalpha(c)) {
+            lex_skip_char(lex);
+            chrvec_append(&c_expr, c);
+        } else if(c == '(') {
+            lex_skip_char(lex);
+            chrvec_append(&c_expr, c);
+            parse_expression(lex, parser);
+        } else if(c == ')') {
+            lex_skip_char(lex);
+            chrvec_append(&c_expr, c);
+            stop = true;
+        } else if(c == '+') {
+            lex_skip_char(lex);
+            chrvec_cat(&c_expr, "||");
+        } else if(c == ';' || c == '\n') {
+            lex_skip_char(lex);
+        } else {
+            PARSE_ERROR(lex, "expected expression got '%c'\n", c);
+            exit(1);
+        }
+    }
 }
 
 void parse_outputs(Lexer* lex, Parser* parser) {
@@ -364,9 +423,8 @@ void parse_outputs(Lexer* lex, Parser* parser) {
                 printf("tokbuf: ");
                 chrvec_print(&tokbuf);
                 strvec_append(&parser->outputs, tokbuf.chars);
-                lex_seekto(lex, '\n');
                 lex_skip_char(lex);
-                // parse_expression(lex, parser);
+                parse_expression(lex, parser);
                 break;
             } else {
                 PARSE_ERROR(lex, "expected [a-zA-Z0-9], '=' or ' ' got '%c' (%d) instead\n", c, c);
@@ -511,7 +569,9 @@ void compile_c_to_so() {
         perror("wait");
         exit(1);
     }
-    // unlink("./funcs.c");
+#if !defined(KEEP_FILES) || KEEP_FILES == 0
+    unlink("./funcs.c");
+#endif
 }
 
 void load_funcs_from_so(StrVec* func_names, bool_func_t** funcs) {
@@ -528,7 +588,9 @@ void load_funcs_from_so(StrVec* func_names, bool_func_t** funcs) {
             exit(1);
         }
     }
+#if !defined(KEEP_FILES) || KEEP_FILES == 0
     unlink("./funcs.so");
+#endif
 }
 
 void generate_truth_table(const ChrVec* inputs, const StrVec* outputs, bool_func_t** funcs) {

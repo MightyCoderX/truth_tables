@@ -12,7 +12,7 @@ run: ${EXE_NAME}
 	./${EXE_NAME}
 
 debug:
-	${CC} ${CFLAGS} ${LIBS} main.c -o ${EXE_NAME} -ggdb
+	${CC} ${CFLAGS} ${LIBS} main.c -o ${EXE_NAME} -ggdb -DKEEP_FILES=1
 	gdb ./ttable
 
 clean: main
