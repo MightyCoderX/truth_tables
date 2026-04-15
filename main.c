@@ -18,23 +18,26 @@
 
 #ifndef KEEP_FILES
 #define KEEP_FILES 0
-#endif /* ifndef KEEP_FILES */
+#endif
 
 #define ERROR(fmt, ...) fprintf(stderr, fmt, ##__VA_ARGS__)
-#define PARSE_ERROR(lex, fmt, ...)                                                                                     \
-    lex_print(lex);                                                                                                    \
-    ERROR("PARSING ERROR: " fmt, ##__VA_ARGS__);
-#define PANIC(fmt, ...)                                                                                                \
-    do {                                                                                                               \
-        ERROR("PANIC: %s():%d: " fmt, __func__, __LINE__, ##__VA_ARGS__);                                              \
-        abort();                                                                                                       \
-    } while(0);
+#define PARSE_ERROR(lex, fmt, ...)                            \
+    lex_print(lex);                                           \
+    ERROR("PARSING ERROR: %d " fmt, __LINE__, ##__VA_ARGS__);
+#define PANIC(fmt, ...)                                                   \
+    do                                                                    \
+    {                                                                     \
+        ERROR("PANIC: %s():%d: " fmt, __func__, __LINE__, ##__VA_ARGS__); \
+        abort();                                                          \
+    } while (0);
 
 typedef int(bool_func_t)(int* inputs);
 
-int* bits_from_int(int num, int n_bits) {
+int* bits_from_int(int num, int n_bits)
+{
     int* bits = malloc(sizeof(*bits) * n_bits);
-    for(int i = 0; i < n_bits; i++) {
+    for (int i = 0; i < n_bits; i++)
+    {
         bits[i] = (num >> (n_bits - 1 - i)) & 1;
     }
 
@@ -47,7 +50,8 @@ typedef struct {
     char* chars;
 } ChrVec;
 
-ChrVec chrvec_new() {
+ChrVec chrvec_new()
+{
     ChrVec vec = {
         .len = 0,
         .capacity = 10,
@@ -59,15 +63,18 @@ ChrVec chrvec_new() {
     return vec;
 }
 
-void chrvec_extend(ChrVec* vec, size_t amount) {
+void chrvec_extend(ChrVec* vec, size_t amount)
+{
     vec->capacity += amount;
     vec->capacity = ceil((float)vec->capacity * 1.5);
     vec->chars = realloc(vec->chars, vec->capacity);
     assert(vec->chars != NULL && "Buy more RAM");
 }
 
-void chrvec_append(ChrVec* vec, char c) {
-    if(vec->len >= vec->capacity) {
+void chrvec_append(ChrVec* vec, char c)
+{
+    if (vec->len >= vec->capacity)
+    {
         chrvec_extend(vec, 1);
     }
 
@@ -75,9 +82,11 @@ void chrvec_append(ChrVec* vec, char c) {
     vec->chars[vec->len + 1] = '\0';
 }
 
-void chrvec_cat(ChrVec* vec, const char* str) {
+void chrvec_cat(ChrVec* vec, const char* str)
+{
     int len = strlen(str);
-    if(vec->len + len >= vec->capacity) {
+    if (vec->len + len >= vec->capacity)
+    {
         chrvec_extend(vec, len + 1);
     }
     memcpy(vec->chars + vec->len, str, len);
@@ -85,34 +94,42 @@ void chrvec_cat(ChrVec* vec, const char* str) {
     vec->chars[vec->len + 1] = '\0';
 }
 
-bool chrvec_contains(ChrVec* vec, char needle) {
-    for(size_t i = 0; i < vec->len; i++) {
-        if(vec->chars[i] == needle) {
+bool chrvec_contains(ChrVec* vec, char needle)
+{
+    for (size_t i = 0; i < vec->len; i++)
+    {
+        if (vec->chars[i] == needle)
+        {
             return true;
         }
     }
     return false;
 }
 
-char chrvec_get(ChrVec* vec, long idx) {
+char chrvec_get(ChrVec* vec, long idx)
+{
     size_t index = idx;
 
-    if(idx < 0L) {
+    if (idx < 0L)
+    {
         index = vec->len + idx;
     }
 
-    if(index >= vec->len) {
+    if (index >= vec->len)
+    {
         PANIC("index %ld out of bounds [0,%zu]\n", idx, vec->len);
     }
 
     return vec->chars[index];
 }
 
-void chrvec_print(ChrVec* vec) {
+void chrvec_print(ChrVec* vec)
+{
     printf("[");
-    for(size_t i = 0; i < vec->len; i++) {
+    for (size_t i = 0; i < vec->len; i++)
+    {
         printf("'%c'", vec->chars[i]);
-        if(i < vec->len - 1) printf(", ");
+        if (i < vec->len - 1) printf(", ");
     }
     printf("]\n");
 }
@@ -123,7 +140,8 @@ typedef struct {
     char** strings;
 } StrVec;
 
-StrVec strvec_new() {
+StrVec strvec_new()
+{
     StrVec vec = {
         .len = 0,
         .capacity = 10,
@@ -134,8 +152,10 @@ StrVec strvec_new() {
     return vec;
 }
 
-void strvec_append(StrVec* vec, const char* str) {
-    if(vec->len >= vec->capacity) {
+void strvec_append(StrVec* vec, const char* str)
+{
+    if (vec->len >= vec->capacity)
+    {
         vec->capacity *= 1.5;
         vec->strings = realloc(vec->strings, vec->capacity * sizeof(char*));
         assert(vec->strings != NULL && "Buy more RAM");
@@ -147,11 +167,13 @@ void strvec_append(StrVec* vec, const char* str) {
     vec->len++;
 }
 
-void strvec_print(StrVec* vec) {
+void strvec_print(StrVec* vec)
+{
     printf("[");
-    for(size_t i = 0; i < vec->len; i++) {
+    for (size_t i = 0; i < vec->len; i++)
+    {
         printf("\"%s\"", vec->strings[i]);
-        if(i < vec->len - 1) printf(", ");
+        if (i < vec->len - 1) printf(", ");
     }
     printf("]\n");
 }
@@ -163,7 +185,8 @@ typedef struct {
     size_t cur;
 } FileBuf;
 
-FileBuf fbuf_new(const char* filename, char* bytes, size_t len) {
+FileBuf fbuf_new(const char* filename, char* bytes, size_t len)
+{
     FileBuf fbuf;
 
     fbuf.filename = malloc(strlen(filename) + 1);
@@ -176,31 +199,39 @@ FileBuf fbuf_new(const char* filename, char* bytes, size_t len) {
     return fbuf;
 }
 
-void fbuf_rseek(FileBuf* fbuf, long amount) {
+void fbuf_rseek(FileBuf* fbuf, long amount)
+{
     long idx = fbuf->cur + amount;
-    if(idx < 0 || idx >= (long)fbuf->len) {
+    if (idx < 0 || idx >= (long)fbuf->len)
+    {
         PANIC("index %ld out of bounds [0,%zu]\n", idx, fbuf->len);
     }
     fbuf->cur += amount;
 }
 
-char fbuf_getc(FileBuf* fbuf, long idx) {
-    if(idx < 0 || idx >= (long)fbuf->len) {
+char fbuf_getc(FileBuf* fbuf, long idx)
+{
+    if (idx < 0 || idx >= (long)fbuf->len)
+    {
         PANIC("index %ld out of bounds [0,%zu]\n", idx, fbuf->len);
     }
     return fbuf->bytes[idx];
 }
 
-char fbuf_nextc(FileBuf* fbuf) {
-    if(fbuf->cur >= fbuf->len) {
+char fbuf_nextc(FileBuf* fbuf)
+{
+    if (fbuf->cur >= fbuf->len)
+    {
         return EOF;
     }
 
     return fbuf->bytes[fbuf->cur++];
 }
 
-char fbuf_peekc(FileBuf* fbuf) {
-    if(fbuf->cur >= fbuf->len) {
+char fbuf_peekc(FileBuf* fbuf)
+{
+    if (fbuf->cur >= fbuf->len)
+    {
         return EOF;
     }
 
@@ -217,73 +248,92 @@ typedef struct {
     Location loc;
 } Lexer;
 
-Lexer lex_new(FileBuf* fbuf) {
+Lexer lex_new(FileBuf* fbuf)
+{
     return (Lexer) {
         fbuf,
         { 1, 1 },
     };
 }
 
-void lex_print(Lexer* lex) {
+void lex_print(Lexer* lex)
+{
     char* fmt = "%s:%zu:%zu:\n    ";
     int fmt_len = strlen(fmt) + 1;
     char* str = malloc(fmt_len);
-    int len = snprintf(str, fmt_len, fmt, lex->fbuf->filename, lex->loc.lineno, lex->loc.colno);
+    int len = snprintf(str, fmt_len, fmt, lex->fbuf->filename, lex->loc.lineno,
+        lex->loc.colno);
     len++;
     str = realloc(str, len);
-    snprintf(str, len, fmt, lex->fbuf->filename, lex->loc.lineno, lex->loc.colno);
+    snprintf(str, len, fmt, lex->fbuf->filename, lex->loc.lineno,
+        lex->loc.colno);
     printf("%s", str);
 
     char c;
     size_t line_start = 0L;
-    if(lex->fbuf->cur > 0L) {
+    if (lex->fbuf->cur > 0L)
+    {
         line_start = lex->fbuf->cur;
-        do {
+        do
+        {
             line_start--;
             c = fbuf_getc(lex->fbuf, line_start);
-        } while(c != '\n' && line_start > 0);
+        } while (c != '\n' && line_start > 0);
     }
     size_t line_len = line_start;
-    while((c = fbuf_getc(lex->fbuf, line_len)) != '\n' && line_len < lex->fbuf->len) {
+    while ((c = fbuf_getc(lex->fbuf, line_len)) != '\n' &&
+        line_len < lex->fbuf->len)
+    {
         putchar(c);
         line_len++;
     }
     printf("\n");
-    for(size_t i = 0; i < (lex->loc.colno - 1 + 4); i++) {
+    for (size_t i = 0; i < (lex->loc.colno - 1 + 4); i++)
+    {
         putchar(' ');
     }
     putchar('^');
     putchar('\n');
 }
 
-char lex_getcur(Lexer* lex) {
+char lex_getcur(Lexer* lex)
+{
     return lex->fbuf->bytes[lex->fbuf->cur];
 }
 
-char lex_skip_char(Lexer* lex) {
+char lex_skip_char(Lexer* lex)
+{
     char c = fbuf_nextc(lex->fbuf);
-    if(c == '\n') {
+    if (c == '\n')
+    {
         lex->loc.lineno++;
         lex->loc.colno = 1;
-    } else {
+    }
+    else
+    {
         lex->loc.colno++;
     }
     return c;
 }
 
-char lex_expect_char(Lexer* lex, char expected) {
+char lex_expect_char(Lexer* lex, char expected)
+{
     char c = lex_skip_char(lex);
-    if(c != expected) {
-        PARSE_ERROR(lex, "expected '%c' got '%c' (%d) instead\n", expected, c, c);
+    if (c != expected)
+    {
+        PARSE_ERROR(lex, "expected '%c' got '%c' (%d) instead\n", expected, c,
+            c);
         exit(1);
     }
 
     return c;
 }
 
-char lex_expect_alpha(Lexer* lex) {
+char lex_expect_alpha(Lexer* lex)
+{
     char c = lex_skip_char(lex);
-    if(!isalpha(c)) {
+    if (!isalpha(c))
+    {
         PARSE_ERROR(lex, "expected [a-zA-Z] got '%c' (%d) instead\n", c, c);
         exit(1);
     }
@@ -291,9 +341,11 @@ char lex_expect_alpha(Lexer* lex) {
     return c;
 }
 
-char lex_expect_alnum(Lexer* lex) {
+char lex_expect_alnum(Lexer* lex)
+{
     char c = lex_skip_char(lex);
-    if(!isalnum(c)) {
+    if (!isalnum(c))
+    {
         PARSE_ERROR(lex, "expected [a-zA-Z0-9] got '%c' (%d) instead\n", c, c);
         exit(1);
     }
@@ -301,19 +353,24 @@ char lex_expect_alnum(Lexer* lex) {
     return c;
 }
 
-char lex_peek_char(Lexer* lex) {
+char lex_peek_char(Lexer* lex)
+{
     return fbuf_peekc(lex->fbuf);
 }
 
-void lex_skip_space(Lexer* lex) {
-    while(isspace(lex_peek_char(lex)))
+void lex_skip_space(Lexer* lex)
+{
+    while (isspace(lex_peek_char(lex)))
         lex_skip_char(lex);
 }
 
-void lex_seekto(Lexer* lex, char target) {
+void lex_seekto(Lexer* lex, char target)
+{
     char c;
-    while((c = lex_peek_char(lex)) != target)
+    while ((c = lex_peek_char(lex)) != target)
+    {
         lex_skip_char(lex);
+    }
 }
 
 typedef struct {
@@ -328,7 +385,8 @@ typedef struct {
     } state;
 } Parser;
 
-Parser parser_new() {
+Parser parser_new()
+{
     return (Parser) {
         .inputs = chrvec_new(),
         .outputs = strvec_new(),
@@ -337,17 +395,21 @@ Parser parser_new() {
     };
 }
 
-void parse_inputs(Lexer* lex, Parser* parser) {
+void parse_inputs(Lexer* lex, Parser* parser)
+{
     bool stop = false;
-    while(!stop) {
+    while (!stop)
+    {
         char input = lex_expect_alpha(lex);
-        if(chrvec_contains(&parser->inputs, input)) {
+        if (chrvec_contains(&parser->inputs, input))
+        {
             PARSE_ERROR(lex, "duplicate variable %c\n", input);
             exit(1);
         }
         chrvec_append(&parser->inputs, input);
         char c = lex_peek_char(lex);
-        switch(c) {
+        switch (c)
+        {
         case ';':
             lex_skip_char(lex);
             parser->state = OUTPUTS;
@@ -356,7 +418,8 @@ void parse_inputs(Lexer* lex, Parser* parser) {
         case ',':
             lex_skip_char(lex);
             c = lex_peek_char(lex);
-            if(c == ' ') {
+            if (c == ' ')
+            {
                 lex_skip_char(lex);
             }
             break;
@@ -473,16 +536,20 @@ void parse_outputs(Lexer* lex, Parser* parser)
 // TODO: Fix lexing and parsing to reduce branching and allow for sorrounding with parentheses
 // the current sub-expression when needed (see ANDs added automatically when two variables
 // are unpacked from same token (eg. `ab` -> `a && b` should be `(a && b)` instead))
-void parse_expr_file(FileBuf* fbuf, Parser* parser) {
+void parse_expr_file(FileBuf* fbuf, Parser* parser)
+{
     Lexer lex = lex_new(fbuf);
 
     bool stop = false;
-    while(!stop) {
-        if(lex_peek_char(&lex) == '#') {
+    while (!stop)
+    {
+        if (lex_peek_char(&lex) == '#')
+        {
             parser->state = COMMENT;
         }
 
-        switch(parser->state) {
+        switch (parser->state)
+        {
         case INPUTS:
             printf("parsing inputs:\n");
             parse_inputs(&lex, parser);
@@ -503,19 +570,22 @@ void parse_expr_file(FileBuf* fbuf, Parser* parser) {
     }
 }
 
-void read_expr_file(FILE* file, FileBuf* fbuf) {
+void read_expr_file(FILE* file, FileBuf* fbuf)
+{
     ChrVec bytes = chrvec_new();
 
     size_t size = 0;
     char c;
-    while((c = fgetc(file)) != EOF) {
+    while ((c = fgetc(file)) != EOF)
+    {
         chrvec_append(&bytes, c);
         size++;
     }
 
     fbuf->bytes = bytes.chars;
     fbuf->len = size;
-    if(fbuf == NULL) {
+    if (fbuf == NULL)
+    {
         exit(1);
     }
 }
@@ -525,8 +595,10 @@ typedef struct {
     FILE* expr_file;
 } Args;
 
-void parse_args(int argc, char** argv, Args* out_args) {
-    if(argc > 2) {
+void parse_args(int argc, char** argv, Args* out_args)
+{
+    if (argc > 2)
+    {
         ERROR("usage: %s [expr_file]\n", argv[0]);
         exit(1);
     }
@@ -534,12 +606,14 @@ void parse_args(int argc, char** argv, Args* out_args) {
     FILE* expr_file = stdin;
     char* filename = "stdin";
 
-    if(argc == 2) {
+    if (argc == 2)
+    {
         filename = argv[1];
         expr_file = fopen(filename, "r");
     }
 
-    if(expr_file == NULL) {
+    if (expr_file == NULL)
+    {
         perror("fopen");
         exit(1);
     }
@@ -548,10 +622,12 @@ void parse_args(int argc, char** argv, Args* out_args) {
     out_args->expr_file = expr_file;
 }
 
-void generate_c_file(const Parser* parser, StrVec* func_names) {
+void generate_c_file(const Parser* parser, StrVec* func_names)
+{
     FILE* funcs_file = fopen("funcs.c", "w");
 
-    if(funcs_file == NULL) {
+    if (funcs_file == NULL)
+    {
         perror("fopen");
         exit(1);
     }
@@ -559,7 +635,8 @@ void generate_c_file(const Parser* parser, StrVec* func_names) {
     fprintf(funcs_file, "#include <stddef.h>\n");
     fprintf(funcs_file, "\n");
 
-    for(size_t i = 0; i < parser->expressions.len; i++) {
+    for (size_t i = 0; i < parser->expressions.len; i++)
+    {
         ChrVec func = chrvec_new();
 
         sprintf(func.chars, "f%zu", i);
@@ -567,10 +644,13 @@ void generate_c_file(const Parser* parser, StrVec* func_names) {
         strvec_append(func_names, func.chars);
 
         fprintf(funcs_file, "int %s(int* inputs) {\n", func.chars);
-        for(size_t j = 0; j < parser->inputs.len; j++) {
-            fprintf(funcs_file, "    int %c = inputs[%zu];\n", parser->inputs.chars[j], j);
+        for (size_t j = 0; j < parser->inputs.len; j++)
+        {
+            fprintf(funcs_file, "    int %c = inputs[%zu];\n",
+                parser->inputs.chars[j], j);
         }
-        fprintf(funcs_file, "    return %s;\n}\n", parser->expressions.strings[i]);
+        fprintf(funcs_file, "    return %s;\n}\n",
+            parser->expressions.strings[i]);
         fprintf(funcs_file, "\n");
 
         free(func.chars);
@@ -578,16 +658,20 @@ void generate_c_file(const Parser* parser, StrVec* func_names) {
     fclose(funcs_file);
 }
 
-void compile_c_to_so() {
+void compile_c_to_so()
+{
     // TODO: Compile functions all in memory using `gcc - -o -` and mmap to load the output into an executable memory page
 
     pid_t child = fork();
-    if(child == -1) {
+    if (child == -1)
+    {
         perror("fork");
         exit(1);
     }
-    if(child == 0) {
-        int err = execlp("gcc", "gcc", //
+    if (child == 0)
+    {
+        int err = execlp("gcc",
+            "gcc", //
             //"-Wall",
             "-o", //
             "funcs.so", //
@@ -595,13 +679,15 @@ void compile_c_to_so() {
             "-shared", //
             NULL //
         );
-        if(err == -1) {
+        if (err == -1)
+        {
             perror("execlp");
         }
         exit(1);
     }
     int err = waitpid(child, NULL, 0);
-    if(err == -1) {
+    if (err == -1)
+    {
         perror("wait");
         exit(1);
     }
@@ -610,17 +696,22 @@ void compile_c_to_so() {
 #endif
 }
 
-void load_funcs_from_so(StrVec* func_names, bool_func_t** funcs) {
+void load_funcs_from_so(StrVec* func_names, bool_func_t** funcs)
+{
     void* handle = dlopen("./funcs.so", RTLD_NOW);
-    if(handle == NULL) {
+    if (handle == NULL)
+    {
         ERROR("dlopen failed: %s\n", dlerror());
         exit(1);
     }
 
-    for(size_t i = 0; i < func_names->len; i++) {
+    for (size_t i = 0; i < func_names->len; i++)
+    {
         funcs[i] = dlsym(handle, func_names->strings[i]);
-        if(funcs[i] == NULL) {
-            ERROR("error when loading function %s: %s\n", func_names->strings[i], dlerror());
+        if (funcs[i] == NULL)
+        {
+            ERROR("error when loading function %s: %s\n",
+                func_names->strings[i], dlerror());
             exit(1);
         }
     }
@@ -629,32 +720,40 @@ void load_funcs_from_so(StrVec* func_names, bool_func_t** funcs) {
 #endif
 }
 
-void generate_truth_table(const ChrVec* inputs, const StrVec* outputs, bool_func_t** funcs) {
+void generate_truth_table(const ChrVec* inputs, const StrVec* outputs,
+    bool_func_t** funcs)
+{
     // print header
-    for(size_t i = 0; i < inputs->len; i++) {
+    for (size_t i = 0; i < inputs->len; i++)
+    {
         printf("%c ", inputs->chars[i]);
     }
     printf("|");
-    for(size_t i = 0; i < outputs->len; i++) {
+    for (size_t i = 0; i < outputs->len; i++)
+    {
         printf(" %s", outputs->strings[i]);
     }
     printf("\n");
 
     // print values
-    for(size_t i = 0; i < pow(2, inputs->len); i++) {
+    for (size_t i = 0; i < pow(2, inputs->len); i++)
+    {
         int* bits = bits_from_int(i, inputs->len);
-        for(size_t j = 0; j < inputs->len; j++) {
+        for (size_t j = 0; j < inputs->len; j++)
+        {
             printf("%d ", bits[j]);
         }
         printf("|");
-        for(size_t j = 0; j < outputs->len; j++) {
+        for (size_t j = 0; j < outputs->len; j++)
+        {
             printf(" %d ", (funcs[j])(bits));
         }
         printf("\n");
     }
 }
 
-int main(int argc, char** argv) {
+int main(int argc, char** argv)
+{
     Args args = { 0 };
     FileBuf fbuf;
     Parser parser;

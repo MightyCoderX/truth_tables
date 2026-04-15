@@ -1,18 +1,9 @@
-# Checkout config tool: https://zed0.co.uk/clang-format-configurator/
-# Or http://cf.monofraps.net/
-# https://clang.llvm.org/docs/ClangFormatStyleOptions.html
-# https://github.com/01org/parameter-framework/blob/master/.clang-format
-
-# Tested on: clang-format version 6.0.1
-
-
 # Common settings
-BasedOnStyle:  WebKit
-TabWidth:        4
-IndentWidth:     4
-UseTab:          Never
-ColumnLimit: 120
-
+BasedOnStyle: WebKit
+TabWidth: 4
+IndentWidth: 4
+UseTab: Never
+ColumnLimit: 80
 
 # http://releases.llvm.org/6.0.1/tools/clang/docs/ClangFormatStyleOptions.html#disabling-formatting-on-a-piece-of-code
 # int formatted_code;
@@ -21,29 +12,17 @@ ColumnLimit: 120
 # // clang-format on
 # void formatted_code_again;
 
-DisableFormat:   false
+DisableFormat: false
 
 BreakBeforeBraces: Custom
-BraceWrapping: {
-    AfterClass: 'false'
-    AfterControlStatement: 'false'
-    AfterEnum : 'false'
-    AfterFunction : 'false'
-    AfterNamespace : 'false'
-    AfterStruct : 'false'
-    AfterUnion : 'false'
-    BeforeCatch : 'false'
-    BeforeElse : 'false'
-    IndentBraces : 'false'
-    AfterExternBlock : 'false'
-    SplitEmptyFunction : 'false'
-    SplitEmptyRecord : 'false'
-    SplitEmptyNamespace : 'false'
-}
+BraceWrapping:
+  AfterFunction: true
+  AfterControlStatement: true
+  BeforeElse: true
 
 PointerAlignment: Left
 SpaceBeforeAssignmentOperators: true
-SpaceBeforeParens: Never
+SpaceBeforeParens: ControlStatementsExceptControlMacros
 SpaceInEmptyParentheses: false
 SpacesBeforeTrailingComments: 1
 SpacesInParentheses: false
@@ -53,6 +32,12 @@ AllowShortIfStatementsOnASingleLine: WithoutElse
 
 SortIncludes: false
 IncludeBlocks: Preserve
+
 # Comments are for developers, they should arrange them
 ReflowComments: false
 
+AlignArrayOfStructures: Right
+AlignEscapedNewlines: LeftWithLastLine
+AllowAllArgumentsOnNextLine: false
+# BinPackArguments: false # one arg per line in function call
+BreakBeforeBinaryOperators: None
