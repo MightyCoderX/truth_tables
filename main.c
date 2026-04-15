@@ -368,66 +368,102 @@ void parse_inputs(Lexer* lex, Parser* parser) {
     lex_skip_space(lex);
 }
 
-void parse_expression(Lexer* lex, Parser* parser) {
+void parse_expression(Lexer* lex, Parser* parser, ChrVec* c_expr)
+{
     bool stop = false;
-    ChrVec c_expr = chrvec_new();
-    while(!stop) {
+    while (!stop)
+    {
         lex_skip_space(lex);
         char c = lex_peek_char(lex);
-        printf("'%c'\n", c);
-        if(isalpha(c)) {
+        printf("'%c' (%d)\n", c, c);
+        printf("%s\n", c_expr->chars);
+        if (isalpha(c))
+        {
             lex_skip_char(lex);
-            chrvec_append(&c_expr, c);
-        } else if(c == '(') {
+            chrvec_append(c_expr, c);
+        }
+        else if (c == '(')
+        {
             lex_skip_char(lex);
-            chrvec_append(&c_expr, c);
-            parse_expression(lex, parser);
-        } else if(c == ')') {
+            chrvec_append(c_expr, c);
+            parse_expression(lex, parser, c_expr);
+        }
+        else if (c == ')')
+        {
             lex_skip_char(lex);
-            chrvec_append(&c_expr, c);
+            chrvec_append(c_expr, c);
             stop = true;
-        } else if(c == '+') {
+        }
+        else if (c == '+')
+        {
             lex_skip_char(lex);
-            chrvec_cat(&c_expr, "||");
-        } else if(c == ';' || c == '\n') {
+            chrvec_cat(c_expr, " || ");
+        }
+        else if (c == ';' || c == '\n' || c == EOF)
+        {
             lex_skip_char(lex);
-        } else {
+            stop = true;
+        }
+        else
+        {
             PARSE_ERROR(lex, "expected expression got '%c'\n", c);
             exit(1);
         }
     }
 }
 
-void parse_outputs(Lexer* lex, Parser* parser) {
+void parse_outputs(Lexer* lex, Parser* parser)
+{
     bool stop = false;
     ChrVec tokbuf = chrvec_new();
-    while(!stop) {
+    while (!stop)
+    {
         strvec_print(&parser->outputs);
         tokbuf = chrvec_new();
-        if(lex_peek_char(lex) == EOF) {
+        if (lex_peek_char(lex) == EOF)
+        {
             parser->state = END;
             stop = true;
             continue;
         }
+
+        if (lex_peek_char(lex) == '\n')
+        {
+            lex_skip_char(lex);
+            continue;
+        }
+
         char c = lex_expect_alpha(lex);
         chrvec_append(&tokbuf, c);
 
-        while(true) {
+        while (true)
+        {
             c = lex_peek_char(lex);
-            if(isalnum(c)) {
+            if (isalnum(c))
+            {
                 lex_skip_char(lex);
                 chrvec_append(&tokbuf, c);
-            } else if(c == ' ') {
+            }
+            else if (c == ' ')
+            {
                 lex_skip_char(lex);
-            } else if(c == '=') {
+            }
+            else if (c == '=')
+            {
                 printf("tokbuf: ");
                 chrvec_print(&tokbuf);
                 strvec_append(&parser->outputs, tokbuf.chars);
                 lex_skip_char(lex);
-                parse_expression(lex, parser);
+                ChrVec c_expr = chrvec_new();
+                parse_expression(lex, parser, &c_expr);
+                strvec_append(&parser->expressions, c_expr.chars);
                 break;
-            } else {
-                PARSE_ERROR(lex, "expected [a-zA-Z0-9], '=' or ' ' got '%c' (%d) instead\n", c, c);
+            }
+            else
+            {
+                PARSE_ERROR(lex,
+                    "expected [a-zA-Z0-9], '=' or ' ' got '%c' (%d) instead\n",
+                    c, c);
                 exit(1);
             }
         }
