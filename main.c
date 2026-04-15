@@ -373,16 +373,18 @@ void lex_seekto(Lexer* lex, char target)
     }
 }
 
+typedef enum {
+    INPUTS,
+    OUTPUTS,
+    COMMENT,
+    END,
+} ParserState;
+
 typedef struct {
     ChrVec inputs;
     StrVec outputs;
     StrVec expressions;
-    enum {
-        INPUTS,
-        OUTPUTS,
-        COMMENT,
-        END,
-    } state;
+    ParserState state;
 } Parser;
 
 Parser parser_new()
@@ -541,10 +543,12 @@ void parse_expr_file(FileBuf* fbuf, Parser* parser)
     Lexer lex = lex_new(fbuf);
 
     bool stop = false;
+    ParserState prev_state;
     while (!stop)
     {
         if (lex_peek_char(&lex) == '#')
         {
+            prev_state = parser->state;
             parser->state = COMMENT;
         }
 
@@ -563,6 +567,7 @@ void parse_expr_file(FileBuf* fbuf, Parser* parser)
             printf("parsing comment:\n");
             lex_seekto(&lex, '\n');
             lex_skip_char(&lex);
+            parser->state = prev_state;
             break;
         case END:
             stop = true;
