@@ -20,6 +20,12 @@
 #define KEEP_FILES 0
 #endif
 
+#define EXIT_ERR_ARGS 1
+#define EXIT_ERR_FILE 2
+#define EXIT_ERR_PARSE 3
+#define EXIT_ERR_COMPILE 4
+#define EXIT_ERR_LOADSO 5
+
 #define ERROR(fmt, ...) fprintf(stderr, fmt, ##__VA_ARGS__)
 #define PARSE_ERROR(lex, fmt, ...)                            \
     lex_print_diagnostic(lex);                                \
@@ -329,7 +335,6 @@ char lex_expect_char(Lexer* lex, char expected)
     {
         PARSE_ERROR(lex, "expected '%c' got '%c' (%d) instead\n", expected, c,
             c);
-        exit(1);
     }
 
     return c;
@@ -341,7 +346,6 @@ char lex_expect_alpha(Lexer* lex)
     if (!isalpha(c))
     {
         PARSE_ERROR(lex, "expected [a-zA-Z] got '%c' (%d) instead\n", c, c);
-        exit(1);
     }
 
     return c;
@@ -353,7 +357,6 @@ char lex_expect_alnum(Lexer* lex)
     if (!isalnum(c))
     {
         PARSE_ERROR(lex, "expected [a-zA-Z0-9] got '%c' (%d) instead\n", c, c);
-        exit(1);
     }
 
     return c;
@@ -412,7 +415,6 @@ void parse_inputs(Lexer* lex, Parser* parser)
         if (chrvec_contains(&parser->inputs, input))
         {
             PARSE_ERROR(lex, "duplicate variable %c\n", input);
-            exit(1);
         }
         chrvec_append(&parser->inputs, input);
         char c = lex_peek_char(lex);
@@ -433,7 +435,6 @@ void parse_inputs(Lexer* lex, Parser* parser)
             break;
         default:
             PARSE_ERROR(lex, "expected ',' or ';' got '%c'\n", c);
-            exit(1);
         }
     }
     lex_skip_space(lex);
@@ -478,7 +479,6 @@ void parse_expression(Lexer* lex, Parser* parser, ChrVec* c_expr)
         else
         {
             PARSE_ERROR(lex, "expected expression got '%c'\n", c);
-            exit(1);
         }
     }
 }
@@ -535,7 +535,6 @@ void parse_outputs(Lexer* lex, Parser* parser)
                 PARSE_ERROR(lex,
                     "expected [a-zA-Z0-9], '=' or ' ' got '%c' (%d) instead\n",
                     c, c);
-                exit(1);
             }
         }
     }
@@ -597,7 +596,8 @@ void read_expr_file(FILE* file, FileBuf* fbuf)
     fbuf->len = size;
     if (fbuf == NULL)
     {
-        exit(1);
+        ERROR("file '%s' is empty\n", fbuf->filename);
+        exit(EXIT_ERR_FILE);
     }
 }
 
@@ -611,7 +611,7 @@ void parse_args(int argc, char** argv, Args* out_args)
     if (argc > 2)
     {
         ERROR("usage: %s [expr_file]\n", argv[0]);
-        exit(1);
+        exit(EXIT_ERR_ARGS);
     }
 
     FILE* expr_file = stdin;
@@ -626,7 +626,7 @@ void parse_args(int argc, char** argv, Args* out_args)
     if (expr_file == NULL)
     {
         perror("fopen");
-        exit(1);
+        exit(EXIT_ERR_FILE);
     }
 
     out_args->expr_filename = filename;
@@ -640,7 +640,7 @@ void generate_c_file(const Parser* parser, StrVec* func_names)
     if (funcs_file == NULL)
     {
         perror("fopen");
-        exit(1);
+        exit(EXIT_ERR_FILE);
     }
 
     fprintf(funcs_file, "#include <stddef.h>\n");
@@ -677,7 +677,7 @@ void compile_c_to_so()
     if (child == -1)
     {
         perror("fork");
-        exit(1);
+        exit(EXIT_ERR_COMPILE);
     }
     if (child == 0)
     {
@@ -694,13 +694,13 @@ void compile_c_to_so()
         {
             perror("execlp");
         }
-        exit(1);
+        exit(EXIT_ERR_COMPILE);
     }
     int err = waitpid(child, NULL, 0);
     if (err == -1)
     {
         perror("wait");
-        exit(1);
+        exit(EXIT_ERR_COMPILE);
     }
 #if !defined(KEEP_FILES) || KEEP_FILES == 0
     unlink("./funcs.c");
@@ -713,7 +713,7 @@ void load_funcs_from_so(StrVec* func_names, bool_func_t** funcs)
     if (handle == NULL)
     {
         ERROR("dlopen failed: %s\n", dlerror());
-        exit(1);
+        exit(EXIT_ERR_LOADSO);
     }
 
     for (size_t i = 0; i < func_names->len; i++)
@@ -723,7 +723,7 @@ void load_funcs_from_so(StrVec* func_names, bool_func_t** funcs)
         {
             ERROR("error when loading function %s: %s\n",
                 func_names->strings[i], dlerror());
-            exit(1);
+            exit(EXIT_ERR_LOADSO);
         }
     }
 #if !defined(KEEP_FILES) || KEEP_FILES == 0
@@ -771,7 +771,7 @@ int main(int argc, char** argv)
     StrVec func_names;
     bool_func_t** funcs;
 
-    // TODO: DON'T exit() in functions, handle errors outside using macros for error codes
+    // TODO: DON'T exit() in functions, handle errors outside
 
     parse_args(argc, argv, &args);
 
