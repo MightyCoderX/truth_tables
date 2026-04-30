@@ -22,8 +22,9 @@
 
 #define ERROR(fmt, ...) fprintf(stderr, fmt, ##__VA_ARGS__)
 #define PARSE_ERROR(lex, fmt, ...)                            \
-    lex_print(lex);                                           \
-    ERROR("PARSING ERROR: %d " fmt, __LINE__, ##__VA_ARGS__);
+    lex_print_diagnostic(lex);                                \
+    ERROR("PARSING ERROR: %d " fmt, __LINE__, ##__VA_ARGS__); \
+    exit(EXIT_ERR_PARSE);
 #define PANIC(fmt, ...)                                                   \
     do                                                                    \
     {                                                                     \
@@ -252,11 +253,14 @@ Lexer lex_new(FileBuf* fbuf)
 {
     return (Lexer) {
         fbuf,
-        { 1, 1 },
+        {
+          .lineno = 1,
+          .colno = 0,
+          },
     };
 }
 
-void lex_print(Lexer* lex)
+void lex_print_diagnostic(Lexer* lex)
 {
     char* fmt = "%s:%zu:%zu:\n    ";
     int fmt_len = strlen(fmt) + 1;
@@ -274,19 +278,21 @@ void lex_print(Lexer* lex)
     if (lex->fbuf->cur > 0L)
     {
         line_start = lex->fbuf->cur;
-        do
+        while (line_start > 0)
         {
-            line_start--;
             c = fbuf_getc(lex->fbuf, line_start);
-        } while (c != '\n' && line_start > 0);
+            if (c == '\n') break;
+            line_start--;
+        }
     }
-    size_t line_len = line_start;
-    while ((c = fbuf_getc(lex->fbuf, line_len)) != '\n' &&
-        line_len < lex->fbuf->len)
+    size_t line_end = line_start;
+    while ((c = fbuf_getc(lex->fbuf, line_end)) != '\n' &&
+        line_end < lex->fbuf->len)
     {
         putchar(c);
-        line_len++;
+        line_end++;
     }
+
     printf("\n");
     for (size_t i = 0; i < (lex->loc.colno - 1 + 4); i++)
     {
