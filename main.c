@@ -318,8 +318,22 @@ char lex_skip_char(Lexer* lex)
     char c = fbuf_nextc(lex->fbuf);
     if (c == '\n')
     {
-        lex->loc.lineno++;
-        lex->loc.colno = 1;
+        while (c == '\n')
+        {
+            lex->loc.lineno++;
+            lex->loc.colno = 0;
+            c = fbuf_nextc(lex->fbuf);
+        }
+        fbuf_rseek(lex->fbuf, -1);
+    }
+
+    if (c == '#')
+    {
+        while (fbuf_peekc(lex->fbuf) != '\n')
+        {
+            fbuf_nextc(lex->fbuf);
+        }
+        c = lex_skip_char(lex);
     }
     else
     {
@@ -385,7 +399,6 @@ void lex_seekto(Lexer* lex, char target)
 typedef enum {
     INPUTS,
     OUTPUTS,
-    COMMENT,
     END,
 } ParserState;
 
@@ -548,15 +561,8 @@ void parse_expr_file(FileBuf* fbuf, Parser* parser)
     Lexer lex = lex_new(fbuf);
 
     bool stop = false;
-    ParserState prev_state;
     while (!stop)
     {
-        if (lex_peek_char(&lex) == '#')
-        {
-            prev_state = parser->state;
-            parser->state = COMMENT;
-        }
-
         switch (parser->state)
         {
         case INPUTS:
@@ -567,12 +573,6 @@ void parse_expr_file(FileBuf* fbuf, Parser* parser)
         case OUTPUTS:
             printf("parsing outputs:\n");
             parse_outputs(&lex, parser);
-            break;
-        case COMMENT:
-            printf("parsing comment:\n");
-            lex_seekto(&lex, '\n');
-            lex_skip_char(&lex);
-            parser->state = prev_state;
             break;
         case END:
             stop = true;
