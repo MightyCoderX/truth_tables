@@ -308,11 +308,6 @@ void lex_print_diagnostic(Lexer* lex)
     putchar('\n');
 }
 
-char lex_getcur(Lexer* lex)
-{
-    return lex->fbuf->bytes[lex->fbuf->cur];
-}
-
 char lex_skip_char(Lexer* lex)
 {
     char c = fbuf_nextc(lex->fbuf);
@@ -462,10 +457,15 @@ void parse_expression(Lexer* lex, Parser* parser, ChrVec* c_expr)
         char c = lex_peek_char(lex);
         printf("'%c' (%d)\n", c, c);
         printf("%s\n", c_expr->chars);
-        if (isalpha(c))
+        if (isalpha(c) || c == '!')
         {
             lex_skip_char(lex);
             chrvec_append(c_expr, c);
+            char nextc = lex_peek_char(lex);
+            if (isalpha(c) && (nextc == '!' || isalpha(nextc)))
+            {
+                chrvec_cat(c_expr, " && ");
+            }
         }
         else if (c == '(')
         {
@@ -484,9 +484,9 @@ void parse_expression(Lexer* lex, Parser* parser, ChrVec* c_expr)
             lex_skip_char(lex);
             chrvec_cat(c_expr, " || ");
         }
-        else if (c == ';' || c == '\n' || c == EOF)
+        else if (c == ';' || c == EOF)
         {
-            lex_skip_char(lex);
+            if (c == ';') lex_skip_char(lex);
             stop = true;
         }
         else
@@ -503,7 +503,6 @@ void parse_outputs(Lexer* lex, Parser* parser)
     while (!stop)
     {
         strvec_print(&parser->outputs);
-        tokbuf = chrvec_new();
         if (lex_peek_char(lex) == EOF)
         {
             parser->state = END;
@@ -511,11 +510,7 @@ void parse_outputs(Lexer* lex, Parser* parser)
             continue;
         }
 
-        if (lex_peek_char(lex) == '\n')
-        {
-            lex_skip_char(lex);
-            continue;
-        }
+        tokbuf = chrvec_new();
 
         char c = lex_expect_alpha(lex);
         chrvec_append(&tokbuf, c);
@@ -523,7 +518,7 @@ void parse_outputs(Lexer* lex, Parser* parser)
         while (true)
         {
             c = lex_peek_char(lex);
-            if (isalnum(c))
+            if (isalnum(c) || c == '_')
             {
                 lex_skip_char(lex);
                 chrvec_append(&tokbuf, c);
